@@ -1,35 +1,86 @@
 @import "tailwindcss";
 
 :root {
-  --bg-color: #3d3d3d;
-  --text-color: #f1f5f9;
-  --primary: #fbbf24;
-  --secondary: #f97316;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #0f172a;
+  background-color: #ffffff;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  font-family: inherit;
+  box-sizing: border-box;
 }
 
 body {
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  font-family: 'Inter', sans-serif;
   margin: 0;
-  padding: 0;
+  min-height: 100vh;
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .bg-loading {
-  background-color: var(--bg-color);
+  background-color: #0f172a;
 }
 
-.bg-background {
-  background-color: var(--bg-color);
+.tg-datepicker,
+.tg-datepicker * {
+  font-family: inherit;
 }
 
-.text-white {
-  color: var(--text-color);
+.tg-datepicker {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 1.5rem !important;
+  box-shadow: 0 25px 50px rgba(15, 23, 42, 0.12);
+  padding: 0.5rem !important;
 }
 
-/* add yellow as rimary color */
+.tg-datepicker .react-datepicker__header {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  padding-bottom: 0.75rem !important;
+  border-top-left-radius: 1.25rem;
+  border-top-right-radius: 1.25rem;
+}
 
+.tg-datepicker .react-datepicker__current-month {
+  font-weight: 600;
+  color: #1e1b4b;
+}
 
-.bg-primary {
-  background-color: var(--primary);
+.tg-datepicker .react-datepicker__day-name,
+.tg-datepicker .react-datepicker__day,
+.tg-datepicker .react-datepicker__time-name {
+  width: 2.25rem;
+  line-height: 2.25rem;
+  margin: 0.1rem;
+}
+
+.tg-datepicker .react-datepicker__day--selected,
+.tg-datepicker .react-datepicker__day--keyboard-selected {
+  background-color: #312e81 !important;
+  color: #ffffff !important;
+  border-radius: 9999px !important;
+}
+
+.tg-datepicker .react-datepicker__day:hover {
+  border-radius: 9999px;
+  background-color: #ede9fe;
+}
+
+.tg-datepicker-popper {
+  z-index: 40;
 }

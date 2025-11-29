@@ -20,7 +20,7 @@ export function AuthWrapper({ children }: { children: ReactNode }) {
     if (!oauthErrorDesc) return null;
 
     if (oauthErrorDesc.includes("Unauthorized")) {
-      return "Tvoj účet nemá povolený prístup do rozhrania.";
+      return "Your account is not authorized to access this interface.";
     }
 
     return oauthErrorDesc;
