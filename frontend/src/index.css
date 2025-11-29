@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  --bg-color: #3d3d3d;
+  --text-color: #f1f5f9;
+  --primary: #fbbf24;
+  --secondary: #f97316;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.bg-loading {
+  background-color: var(--bg-color);
+}
+
+.bg-background {
+  background-color: var(--bg-color);
+}
+
+.text-white {
+  color: var(--text-color);
+}
+
+/* add yellow as rimary color */
+
+
+.bg-primary {
+  background-color: var(--primary);
+}
