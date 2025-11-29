@@ -1,92 +1,95 @@
 # 🧭 TripGuardian
-TripGuardian je autonómny AI agent, ktorý ti najprv pomôže naplánovať trasu, nechá ťa ju doladiť podľa tvojich predstáv a keď na ňu vyrazíš, v reálnom čase sleduje tvoju polohu, počasie a situáciu na trase a sám navrhuje zmeny, aby bola cesta čo najlepšia.
+TripGuardian is an autonomous AI agent that helps you plan a route, refine it to your preferences, and once you start your journey, it monitors your location, weather, and conditions in real time - proactively suggesting adjustments to ensure your trip is as smooth and enjoyable as possible.
 
 ---
 
-## 🌍 Problém, ktorý riešime
+## 🌍 The Problem We Solve
 
-Súčasné nástroje na plánovanie trás majú jasné limity:
+Traditional navigation tools can plan a route, but they fail when conditions change:
 
-- trasa je statická a nereaguje na real-time zmeny,
-- AI planner väčšinou poskytne iba prvý návrh bez dynamického update,
-- používateľ musí sám sledovať počasie, meškanie a rozhodovať.
+- the plan is static and doesn’t adapt to delays or weather,
+- AI planners usually stop after the first suggestion,
+- the user must constantly think about whether to skip, shorten, or change something.
 
-Chýba niečo, čo funguje ako **digitálny spolujazdec**, nie len mapa.
-
----
-
-## 💡 Riešenie – LiveRoute Agent
-
-LiveRoute Agent funguje v dvoch hlavných režimoch:
-
-### 1️⃣ Fáza: Plánovanie trasy
-
-Používateľ zadá:
-- **Start** a **Destination** (A → B)
-- voliteľné preferencie (výhľady, rýchle zastávky, káva, atď.)
-
-AI agent:
-- vygeneruje návrh trasy a POI zastávky,
-- doplní ich o krátke popisy a odporúčania,
-- umožní používateľovi zastávky pridávať, mazať, meniť poradie.
-
-Po potvrdení sa trasa uloží.
+There is no tool that behaves like a **digital co-driver**, not just a map.
 
 ---
 
-### 2️⃣ Fáza: Live režim (autonómny agent počas jazdy)
+## 💡 The Solution – LiveRoute Agent
 
-Po stlačení **Start** na uloženej trase:
+LiveRoute Agent operates in two phases:
 
-- web app sleduje **live polohu** používateľa,
-- zobrazí mapu a plánované POI,
-- agent každých X minút urobí:
+### 1️⃣ Planning Phase
 
-1. zistenie polohy  
-2. predikciu počasia  
-3. analýzu meškania a podmienok  
-4. autonómne **generuje odporúčania**:
+The user enters:
+- **Start** and **Destination (A → B)**  
+- optional preferences (scenic views, quick stops, coffee/food, etc.)
 
-> „Na vyhliadke bude pršať – preskoč ju a navrhujem kaviareň v meste X.“  
-> „Meškáš 25 minút – skráť zastávku Y na 10 minút.“
+The AI agent:
+- generates the first draft of a route with recommended POIs,  
+- adds short descriptions and recommendations,  
+- allows the user to add, remove, or reorder stops.
 
-Používateľ môže odporúčania prijať alebo ignorovať.
-
----
-
-## 🎯 MVP funkcionalita (hackathon verzia)
-
-### Plánovanie
-- formulár: Start, Destination  
-- AI návrh zastávok s popismi  
-- výber zastávok → uloženie trasy  
-
-### Detail trasy
-- mapa  
-- zoznam zastávok  
-
-### Live mód
-- sledovanie polohy (kým je tab otvorený)  
-- každých X minút: počasie + AI odporúčanie  
-- zobrazenie návrhov v UI paneli
-
-> V MVP sa trasa fyzicky neprepočítava – odporúčania sú textové.
+When satisfied, the user hits **Save Route**.
 
 ---
 
-## 🤖 Prečo ide o autonómny AI agent
+### 2️⃣ Live Mode – Autonomous Agent on the Road
 
-Používateľ dá len jednoduché inštrukcie:
-- „Naplánuj trasu A → B.“
-- „Začni live mód.“
+When the user starts the trip:
 
-Agent následne:
-- plánuje,  
-- používa routing, počasie, geolokáciu,  
-- pravidelne kontroluje realitu,  
-- autonómne navrhuje zmeny.
+- they click **Start** on a saved route,
+- the web app begins **live location tracking**,
+- shows the user on the map along with the planned route.
 
-Ide teda o skutočného **autonómneho AI spolujazdca**.
+Every X minutes, the agent:
+
+1. reads the current location,  
+2. fetches weather for upcoming points,  
+3. analyzes timing, delays, and conditions,  
+4. autonomously generates actionable suggestions:
+
+> “Rain is expected at Stop 3. I recommend skipping the viewpoint and visiting a café in City X.”  
+> “You’re running behind schedule. Consider shortening Stop Y to 10 minutes.”
+
+The user can accept or ignore the suggestions.  
+The agent handles all reasoning autonomously.
+
+---
+
+## 🎯 MVP Features (Hackathon Version)
+
+### Route Planning
+- Form: Start, Destination  
+- AI-generated POIs with descriptions  
+- User selects final stops → route is saved  
+
+### Route Details
+- map display  
+- list of stops  
+
+### Live Mode
+- browser-based live tracking  
+- periodic (every X minutes) weather + analysis  
+- text-based recommendations displayed in UI  
+
+> No automatic map re-routing in MVP — suggestions are text-only, which is perfect for a hackathon proof-of-concept.
+
+---
+
+## 🤖 Why It Qualifies as an Autonomous AI Agent
+
+The user provides only high-level goals:
+- “Plan a route from A to B.”  
+- “Start live mode.”
+
+The agent then autonomously:
+- plans and adjusts the route,
+- uses routing, weather, geolocation, and AI reasoning,
+- monitors conditions periodically,
+- generates decisions and suggestions without being asked.
+
+It behaves like a **digital co-pilot**, not a chatbot.
 
 ---
 
@@ -95,17 +98,17 @@ Ide teda o skutočného **autonómneho AI spolujazdca**.
 ### Frontend
 - **React + Vite**
 - **PWA (Progressive Web App)**
-- Mapová integrácia (Mapbox/Leaflet)
+- Map integration (Mapbox / Leaflet)
 
-### Backend (serverless)
+### Backend (Serverless)
 - **AWS Lambda**
 - **AWS API Gateway**
 
 ### Hosting & Storage
-- **S3 bucket**: `travel-guardian-webui`  
-- **CloudFront distribution** (CDN)
+- **Amazon S3**: `travel-guardian-webui`  
+- **AWS CloudFront** (CDN distribution)
 
-### Auth
+### Authentication
 - **Google OAuth2**
 - **AWS Cognito**
 
