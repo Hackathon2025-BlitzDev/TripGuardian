@@ -6,6 +6,11 @@
   background-color: #ffffff;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  --tg-primary: #0f172a;
+  --tg-primary-dark: #0b152b;
+  --tg-border: #e2e8f0;
+  --tg-text: #0f172a;
+  --tg-muted: #475569;
 }
 
 * {
@@ -20,6 +25,85 @@ body {
   color: #0f172a;
 }
 
+.tg-auth {
+  min-height: 100vh;
+  padding: 2.5rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 45%),
+    radial-gradient(circle at 20% 20%, rgba(249, 115, 22, 0.12), transparent 35%),
+    #f8fafc;
+}
+
+.tg-auth__card {
+  width: min(480px, 100%);
+  border-radius: 2.5rem;
+  padding: 3rem 3.25rem;
+  background: #ffffff;
+  box-shadow: 0 40px 90px rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.tg-auth__badge {
+  font-size: 0.75rem;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  color: #6366f1;
+  font-weight: 600;
+}
+
+.tg-auth__title {
+  font-size: 1.65rem;
+  font-weight: 600;
+  margin: 0;
+  color: #0f172a;
+}
+
+.tg-auth__subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.tg-auth__spinner {
+  width: 3.75rem;
+  height: 3.75rem;
+  margin: 0 auto;
+  border-radius: 9999px;
+  border: 4px solid rgba(99, 102, 241, 0.15);
+  border-top-color: #312e81;
+  animation: tg-spin 1s linear infinite;
+}
+
+.tg-auth__progress {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.tg-auth__highlight {
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+@keyframes tg-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 img {
   display: block;
   max-width: 100%;
@@ -30,6 +114,74 @@ button {
   background: none;
   border: none;
   cursor: pointer;
+}
+
+.tg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.tg-btn:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.35);
+  outline-offset: 2px;
+}
+
+.tg-btn--primary {
+  background-color: var(--tg-primary);
+  border-color: var(--tg-primary);
+  color: #ffffff;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.18);
+}
+
+.tg-btn--primary:hover {
+  background-color: var(--tg-primary-dark);
+  transform: translateY(-1px);
+}
+
+.tg-btn--primary:active {
+  transform: translateY(0);
+}
+
+.tg-btn--secondary {
+  background-color: #ffffff;
+  border-color: var(--tg-border);
+  color: var(--tg-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.tg-btn--secondary:hover {
+  border-color: #cbd5f5;
+  color: var(--tg-primary-dark);
+}
+
+.tg-btn--ghost {
+  background-color: transparent;
+  border-color: var(--tg-border);
+  color: var(--tg-muted);
+}
+
+.tg-btn--ghost:hover {
+  background-color: rgba(241, 245, 249, 0.65);
+}
+
+.tg-btn--sm {
+  padding: 0.45rem 1.1rem;
+  font-size: 0.85rem;
+}
+
+.tg-btn--xs {
+  padding: 0.3rem 0.85rem;
+  font-size: 0.75rem;
+  gap: 0.35rem;
 }
 
 .bg-loading {
