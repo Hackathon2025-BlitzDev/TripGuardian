@@ -22,29 +22,12 @@ ROUTE_PLANNER = ToolDefinition(
         },
         "required": ["origin", "destination"],
     },
-    mock_response={
-        "distance_km": 401,
-        "estimated_duration_minutes": 270,
-        "legs": [
-            {
-                "from": "Košice",
-                "to": "Zvolen",
-                "distance_km": 210,
-                "instructions": "D1 smerom na Prešov a potom R1 na Zvolen",
-            },
-            {
-                "from": "Zvolen",
-                "to": "Bratislava",
-                "distance_km": 191,
-                "instructions": "Pokračuj po R1/D1, rátaj s hustejšou premávkou pri Trnave",
-            },
-        ],
-    },
+    mock_response={"distance_km": None, "estimated_duration_minutes": None, "legs": []},
 )
 
 PLACES_SEARCH = ToolDefinition(
     name="PlacesSearchTool",
-    description="Finds noteworthy attractions, cafés, and meal spots around a waypoint or city.",
+    description="Finds noteworthy attractions, cafes, and meal spots around a waypoint or city.",
     input_schema={
         "type": "object",
         "properties": {
@@ -57,20 +40,7 @@ PLACES_SEARCH = ToolDefinition(
         },
         "required": ["location"],
     },
-    mock_response={
-        "places": [
-            {
-                "name": "Banská Bystrica – Námestie SNP",
-                "category": "Historic center",
-                "highlight": "farebné meštianske domy a remeselné kaviarne",
-            },
-            {
-                "name": "Motorest Zubor (Zvolen)",
-                "category": "Food",
-                "highlight": "domáce jedlá, možnosť rýchleho obeda",
-            },
-        ]
-    },
+    mock_response={"places": []},
 )
 
 POI_NEAR_ROUTE = ToolDefinition(
@@ -90,20 +60,7 @@ POI_NEAR_ROUTE = ToolDefinition(
         },
         "required": ["route_id"],
     },
-    mock_response={
-        "suggestions": [
-            {
-                "name": "Špania Dolina",
-                "detour_km": 6,
-                "reason": "unikátna banícka dedinka a drevený chodník v lese",
-            },
-            {
-                "name": "Čiernohronská železnica",
-                "detour_km": 12,
-                "reason": "nostalgická jazda vlakom počas víkendov",
-            },
-        ]
-    },
+    mock_response={"suggestions": []},
 )
 
 FUEL_STATIONS = ToolDefinition(
@@ -121,20 +78,7 @@ FUEL_STATIONS = ToolDefinition(
         },
         "required": ["route_id", "energy_type"],
     },
-    mock_response={
-        "stations": [
-            {
-                "name": "Slovnaft Budča",
-                "amenities": ["coffee", "restrooms"],
-                "eta_from_start_minutes": 140,
-            },
-            {
-                "name": "OMV Sereď",
-                "amenities": ["fresh corner", "fast EV chargers"],
-                "eta_from_start_minutes": 220,
-            },
-        ]
-    },
+    mock_response={"stations": []},
 )
 
 WEATHER = ToolDefinition(
@@ -151,12 +95,7 @@ WEATHER = ToolDefinition(
         },
         "required": ["waypoints"],
     },
-    mock_response={
-        "forecast": [
-            {"location": "Zvolen", "condition": "ľahké prehánky", "temp_c": 16},
-            {"location": "Nitra", "condition": "polooblačno", "temp_c": 18},
-        ]
-    },
+    mock_response={"forecast": []},
 )
 
 USER_PROFILE = ToolDefinition(
@@ -169,13 +108,7 @@ USER_PROFILE = ToolDefinition(
         },
         "required": ["user_id"],
     },
-    mock_response={
-        "preferences": {
-            "food": "lokálne bistrá",
-            "pace": "relaxed",
-            "interests": ["príroda", "káva"],
-        }
-    },
+    mock_response={"preferences": {}},
 )
 
 TRIP_SUMMARY = ToolDefinition(
@@ -193,9 +126,7 @@ TRIP_SUMMARY = ToolDefinition(
         },
         "required": ["stops"],
     },
-    mock_response={
-        "summary": "3 zastávky zapísané, pridané pripomienky k počasiu a občerstveniu.",
-    },
+    mock_response={"summary": ""},
 )
 
 
