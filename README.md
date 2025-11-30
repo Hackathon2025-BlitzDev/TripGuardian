@@ -175,3 +175,20 @@ It is an **autonomous, proactive, multi-agent travel companion** that:
 - adapts your trip automatically based on weather and delays.
 
 A travel experience that finally *thinks with you* — not after you.
+
+---
+
+# 🔧 Lokálne spustenie backendu
+
+Pre rýchle testovanie AI agentov vieš backend naštartovať aj bez AWS infra:
+
+1. `cd backend && pip install -r requirements.txt`
+2. nastav kľúče (minimálne Google Places) – napr. vo Windows PowerShell:
+  ```powershell
+  $env:GOOGLE_PLACES_API_KEY="<tvoj_kľúč>"
+  ```
+  Voliteľne môžeš použiť `GOOGLE_MAPS_API_KEY` alebo `GOOGLE_API_KEY`. Ostatné nástroje využívajú verejné API (Open-Meteo, OpenStreetMap), takže nevyžadujú prihlásenie.
+3. spusti server `python main.py` a otestuj `curl http://localhost:8000/health`.
+4. route planner, POI aj čerpacie stanice kombinujú Google Places + Overpass, preto odporúčame bežať len zopár dopytov za sebou (dodržiavame dlhšie timeouty a jednoduchý rate-limit priamo v kóde).
+
+Frontend (Vite) vieš pustiť nezávisle cez `cd frontend && npm install && npm run dev`. Výchozí .env smeruje na `http://localhost:8000`.

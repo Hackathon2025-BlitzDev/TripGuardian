@@ -1,0 +1,9 @@
+{
+  "demo-user": {
+    "home_city": "Košice",
+    "interests": ["priroda", "kava"],
+    "travel_style": "relaxed",
+    "food_preferences": "lokalne bistro a kava",
+    "notes": "Preferuje 2-3 kratke prestavky"
+  }
+}
