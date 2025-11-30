@@ -10,12 +10,26 @@ from app.config import APP_CONFIG
 from app.logging_config import setup_logging
 from app.services.tool_registry import ToolRegistry
 from app.tools.definitions import TOOL_DEFINITIONS
+from app.tools.fuel_stations_runner import FuelStationsToolRunner
+from app.tools.places_search_runner import PlacesSearchToolRunner
+from app.tools.poi_near_route_runner import POINearRouteToolRunner
+from app.tools.route_planner_runner import RoutePlannerToolRunner
+from app.tools.trip_summary_runner import TripSummaryToolRunner
+from app.tools.user_profile_runner import UserProfileToolRunner
+from app.tools.weather_runner import WeatherToolRunner
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 # Global singletons for the lightweight skeleton deployment.
 tool_registry = ToolRegistry(TOOL_DEFINITIONS)
+tool_registry.register_handler("RoutePlannerTool", RoutePlannerToolRunner())
+tool_registry.register_handler("PlacesSearchTool", PlacesSearchToolRunner())
+tool_registry.register_handler("POINearRouteTool", POINearRouteToolRunner())
+tool_registry.register_handler("FuelStationsTool", FuelStationsToolRunner())
+tool_registry.register_handler("WeatherTool", WeatherToolRunner())
+tool_registry.register_handler("UserProfileTool", UserProfileToolRunner())
+tool_registry.register_handler("TripSummaryTool", TripSummaryToolRunner())
 agent_brain = AgentBrain(tool_registry=tool_registry)
 
 app = FastAPI(title=APP_CONFIG.project_name, version=APP_CONFIG.version)

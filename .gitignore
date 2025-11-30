@@ -1,0 +1,43 @@
+# Environment configs
+.env
+.env.*
+!.env.example
+.venv/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build & packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# IDE / editor crap
+.idea/
+.vscode/
+*.code-workspace
+
+# OS noise
+Thumbs.db
+.DS_Store
+*.swp
+
+# Local data & cache
+.cache/
+logs/
+*.log
+
+# Node / frontend (if present)
+node_modules/
+npm-debug.log*
+yarn.lock
+package-lock.json
