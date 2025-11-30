@@ -1,0 +1,10 @@
+{
+  "stops": [
+    "Košice",
+    "Zvolen",
+    "Bratislava"
+  ],
+  "notes": "Simulovaná verzia bez reálnych API volaní.",
+  "summary": "Plan obsahuje 3 bodov: Košice → Zvolen → Bratislava. Poznámky: Simulovaná verzia bez reálnych API volaní.",
+  "saved_at": "2025-11-30T08:27:26.554146+00:00"
+}

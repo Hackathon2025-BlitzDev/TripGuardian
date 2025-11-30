@@ -33,6 +33,19 @@ WEATHER_CODES = {
 class WeatherToolRunner:
     def __call__(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         waypoints = arguments.get("waypoints") or []
+        simulate = arguments.get("simulate")
+        if simulate in {"rain", "storm"}:
+            return {
+                "forecast": [
+                    {
+                        "location": wp,
+                        "condition": "silny dazd a burky" if simulate == "storm" else "silny dazd",
+                        "temp_c": 8,
+                        "precip_probability": 90,
+                    }
+                    for wp in waypoints
+                ]
+            }
         if not waypoints:
             return WEATHER.mock_response
         forecast = []
@@ -78,6 +91,8 @@ class WeatherToolRunner:
         for idx, timestamp in enumerate(times):
             try:
                 slot = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                if slot.tzinfo is None:
+                    slot = slot.replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
             if now <= slot <= horizon:
