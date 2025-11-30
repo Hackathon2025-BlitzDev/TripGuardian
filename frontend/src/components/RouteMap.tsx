@@ -19,6 +19,8 @@ export type RouteMapMarker = {
 type RouteMapProps = {
   markers: RouteMapMarker[];
   routeLine: Coordinates[];
+  currentLocation?: Coordinates | null;
+  focusCoordinate?: Coordinates | null;
 };
 
 const FitBounds = ({ positions }: { positions: LatLngExpression[] }) => {
@@ -33,13 +35,24 @@ const FitBounds = ({ positions }: { positions: LatLngExpression[] }) => {
   return null;
 };
 
+const FocusLocation = ({ coordinate }: { coordinate: Coordinates | null | undefined }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!coordinate) return;
+    map.flyTo([coordinate.lat, coordinate.lon], 11, { animate: true, duration: 1.2 });
+  }, [coordinate, map]);
+
+  return null;
+};
+
 const colorForMarker = (type: RouteMapMarker["type"]) => {
   if (type === "start") return "#22c55e";
   if (type === "destination") return "#f97316";
   return "#0ea5e9";
 };
 
-const RouteMap = ({ markers, routeLine }: RouteMapProps) => {
+const RouteMap = ({ markers, routeLine, currentLocation, focusCoordinate }: RouteMapProps) => {
   const markerPositions = useMemo<LatLngExpression[]>(
     () => markers.map((marker) => [marker.coordinates.lat, marker.coordinates.lon] as LatLngExpression),
     [markers]
@@ -50,7 +63,13 @@ const RouteMap = ({ markers, routeLine }: RouteMapProps) => {
     [routeLine]
   );
 
-  const fitPositions = markerPositions.length ? markerPositions : routePositions;
+  const fitPositions = useMemo(() => {
+    if (focusCoordinate) return [];
+    if (markerPositions.length) return markerPositions;
+    if (routePositions.length) return routePositions;
+    if (currentLocation) return [[currentLocation.lat, currentLocation.lon] as LatLngExpression];
+    return [];
+  }, [markerPositions, routePositions, currentLocation, focusCoordinate]);
 
   return (
     <MapContainer className="tg-route-map" center={[48.1486, 17.1077]} zoom={5} zoomControl={false} scrollWheelZoom={false} attributionControl={false}>
@@ -79,7 +98,18 @@ const RouteMap = ({ markers, routeLine }: RouteMapProps) => {
           </CircleMarker>
         );
       })}
-      <FitBounds positions={fitPositions} />
+      {currentLocation && (
+        <CircleMarker
+          center={[currentLocation.lat, currentLocation.lon]}
+          radius={10}
+          pathOptions={{ color: "#f43f5e", fillColor: "#f43f5e", fillOpacity: 0.95, weight: 2 }}
+        >
+          <Tooltip direction="top" offset={[0, -6]} opacity={1} className="text-xs">
+            <div className="text-xs font-semibold text-slate-900">Aktuálna poloha</div>
+          </Tooltip>
+        </CircleMarker>
+      )}
+      {focusCoordinate ? <FocusLocation coordinate={focusCoordinate} /> : <FitBounds positions={fitPositions} />}
     </MapContainer>
   );
 };

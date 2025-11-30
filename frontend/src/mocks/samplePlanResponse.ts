@@ -1,26 +1,55 @@
-const samplePlanResponse = {
-  text: "Driving from Košice to Bratislava lets you add four iconic breaks: panoramic Spišský hrad, modern art inside Oravská galéria, the craft heritage of Budatínsky hrad, and sunset views from Trenčiansky hrad. Each stop sits just off the main route, so you can visit them all within a single day.",
-  context: {
-    mode: "mock",
-    query: "Plan a trip from Košice to Bratislava and include iconic stopovers.",
-    tools_used: [
-      {
-        name: "PlacesSearchTool",
-        arguments: {
-          location: "Spišské Podhradie / Levoča",
-          categories: ["unesco", "history"],
+const samplePlanResponse = [
+  {
+    tripId: "sample-trip",
+    userId: "demo-user",
+    status: "planned",
+    generatedAt: "2025-11-30T10:15:23.000Z",
+    basics: {
+      start: "Košice",
+      destination: "Bratislava",
+      stops: ["Spišský hrad", "Oravská galéria", "Budatínsky hrad", "Trenčiansky hrad"],
+      startDate: "2025-12-01",
+      endDate: "2025-12-04",
+      flexibleDates: false,
+    },
+    preferences: {
+      categories: ["Culture", "Food"],
+      transport: "car",
+      budget: 500,
+    },
+    map: {
+      markers: [
+        {
+          id: "start",
+          name: "Košice",
+          coordinates: { lat: 48.716386, lon: 21.261075 },
+          type: "start",
         },
-        output: {
+        {
+          id: "destination",
+          name: "Bratislava",
+          coordinates: { lat: 48.148597, lon: 17.107748 },
+          type: "destination",
+        },
+      ],
+      routeLine: [
+        { lat: 48.716386, lon: 21.261075 },
+        { lat: 48.148597, lon: 17.107748 },
+      ],
+    },
+    planResult: {
+      summary:
+        "Driving from Košice to Bratislava lets you add four iconic breaks: panoramic Spišský hrad, modern art inside Oravská galéria, the craft heritage of Budatínsky hrad, and sunset views from Trenčiansky hrad. Each stop sits just off the main route, so you can visit them all within a single day.",
+      locations: [
+        {
+          location: "Spišské Podhradie / Levoča",
           places: [
             {
               name: "Spišský hrad (UNESCO)",
               category: "UNESCO",
               highlight: "The largest castle complex in Central Europe with sweeping views of Levoča and the High Tatras.",
               website: "https://www.spisskemuzeum.com/spissky-hrad/",
-              coordinates: {
-                lat: 48.9997,
-                lon: 20.7686,
-              },
+              coordinates: { lat: 48.9997, lon: 20.7686 },
               images: [
                 "/Spis1.jpg",
                 "/spis2.webp",
@@ -29,24 +58,15 @@ const samplePlanResponse = {
             },
           ],
         },
-      },
-      {
-        name: "PlacesSearchTool",
-        arguments: {
+        {
           location: "Dolný Kubín / Ružomberok",
-          categories: ["art", "gallery"],
-        },
-        output: {
           places: [
             {
               name: "Oravská galéria",
               category: "Art Gallery",
               highlight: "Modern and regional art displayed inside the historic County House right in Dolný Kubín.",
               website: "https://www.oravskagaleria.sk",
-              coordinates: {
-                lat: 49.2102,
-                lon: 19.296,
-              },
+              coordinates: { lat: 49.2102, lon: 19.296 },
               images: [
                 "/galeria1.jpg",
                 "/galeria2.jpg",
@@ -55,24 +75,15 @@ const samplePlanResponse = {
             },
           ],
         },
-      },
-      {
-        name: "PlacesSearchTool",
-        arguments: {
+        {
           location: "Žilina",
-          categories: ["history", "craft"],
-        },
-        output: {
           places: [
             {
               name: "Budatínsky hrad – Múzeum drotárstva",
               category: "History",
               highlight: "Renaissance castle at the confluence of the Váh and Kysuca rivers with a museum of master wire artisans.",
               website: "https://www.pmza.sk/budatinsky-hrad",
-              coordinates: {
-                lat: 49.2308,
-                lon: 18.7444,
-              },
+              coordinates: { lat: 49.2308, lon: 18.7444 },
               images: [
                 "/badatin1.jpg",
                 "/budatin2.jpg",
@@ -81,24 +92,15 @@ const samplePlanResponse = {
             },
           ],
         },
-      },
-      {
-        name: "PlacesSearchTool",
-        arguments: {
+        {
           location: "Trenčín / toward Bratislava",
-          categories: ["castle", "viewpoint"],
-        },
-        output: {
           places: [
             {
               name: "Trenčiansky hrad",
               category: "Castle",
               highlight: "Dominant fortress of the Považie region with legends of Omar and Fatima plus commanding views over the whole city.",
               website: "https://www.muzeumtn.sk/",
-              coordinates: {
-                lat: 48.8945,
-                lon: 18.0413,
-              },
+              coordinates: { lat: 48.8945, lon: 18.0413 },
               images: [
                 "/trencin1.jpg",
                 "/trencin2.jpg",
@@ -107,9 +109,9 @@ const samplePlanResponse = {
             },
           ],
         },
-      },
-    ],
+      ],
+    },
   },
-};
+];
 
 export default samplePlanResponse;

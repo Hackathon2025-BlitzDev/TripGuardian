@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
+import { SyncCalendarTripsButton } from "./SyncCalendarTripsButton";
 
 type NavbarProps = {
   signOut: () => void;
@@ -26,6 +27,7 @@ const Navbar = ({ signOut }: NavbarProps) => {
           >
             My Trips
           </Link>
+          <SyncCalendarTripsButton />
           {auth.isAuthenticated ? (
             <button
               onClick={signOut}

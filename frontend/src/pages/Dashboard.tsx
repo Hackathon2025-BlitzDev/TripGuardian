@@ -34,7 +34,7 @@ import DatePickerInput from "../components/DatePickerInput";
 import LocationAutocomplete from "../components/LocationAutocomplete";
 import RouteMap, { type RouteMapMarker } from "../components/RouteMap";
 import samplePlanResponse from "../mocks/samplePlanResponse";
-import { SyncCalendarTripsButton } from "../components/SyncCalendarTripsButton";
+import { consumePlannerResume, saveTripToStorage, type SavedTripRecord } from "../utils/tripsStorage";
 // import { ConnectGoogleCalendarButton } from "../components/ConnectGoogleCalendarButton";
 
 const stats: { label: string; value: string; path?: string }[] = [
@@ -125,7 +125,20 @@ type TripPlanRequestPayload = {
   preferences: PreferencesState;
 };
 
-const PLAN_API_URL = import.meta.env.VITE_TRIP_PLAN_ENDPOINT;
+type FeedbackTone = "success" | "error" | "info";
+
+const buildTripsApiUrl = () => {
+  const base = import.meta.env.VITE_API_BASE_URL;
+  if (!base) return undefined;
+  try {
+    return new URL("api/trips", base).toString();
+  } catch (error) {
+    console.error("Invalid API base URL", error);
+    return undefined;
+  }
+};
+
+const TRIPS_API_URL = buildTripsApiUrl();
 const FALLBACK_PLACE_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
 const geocodeCache = new Map<string, Coordinates | null>();
 const OSRM_BASE_URL = "https://router.project-osrm.org";
@@ -225,74 +238,98 @@ const buildRoadPolyline = async (nodes: Coordinates[]): Promise<Coordinates[] | 
   return result;
 };
 
-const parsePlanResponse = (payload: unknown): PlanResult => {
-  const data = (payload ?? {}) as Record<string, unknown>;
-  const summary = typeof data.text === "string" ? data.text : "";
-  const tools = Array.isArray((data.context as Record<string, unknown>)?.tools_used)
-    ? ((data.context as Record<string, unknown>)?.tools_used as unknown[])
-    : [];
+const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "").slice(0, 60);
 
-  const locations: PlanLocation[] = tools
-    .map((toolEntry) => {
-      const tool = toolEntry as Record<string, unknown>;
-      const location =
-        typeof (tool.arguments as Record<string, unknown>)?.location === "string"
-          ? ((tool.arguments as Record<string, unknown>).location as string)
-          : "Unknown location";
-      const placesSource = Array.isArray((tool.output as Record<string, unknown>)?.places)
-        ? ((tool.output as Record<string, unknown>)?.places as unknown[])
-        : [];
+const feedbackToneClass = (tone: FeedbackTone) => {
+  if (tone === "success") return "text-emerald-600";
+  if (tone === "error") return "text-red-500";
+  return "text-slate-500";
+};
 
-      const places: PlanPlace[] = placesSource
-        .map((entry, index) => {
-          const place = entry as Record<string, unknown>;
-          const name = typeof place.name === "string" ? place.name : `Attraction ${index + 1}`;
-          const coordinatesSource =
-            typeof place.coordinates === "object" && place.coordinates !== null
-              ? (place.coordinates as Record<string, unknown>)
-              : undefined;
-          const latValue =
-            toNumber(coordinatesSource?.lat) ??
-            toNumber(coordinatesSource?.latitude) ??
-            toNumber(place.lat) ??
-            toNumber(place.latitude);
-          const lonValue =
-            toNumber(coordinatesSource?.lon) ??
-            toNumber(coordinatesSource?.lng) ??
-            toNumber(coordinatesSource?.longitude) ??
-            toNumber(place.lon) ??
-            toNumber(place.lng) ??
-            toNumber(place.longitude);
-          const coordinates = latValue != null && lonValue != null ? ({ lat: latValue, lon: lonValue } satisfies Coordinates) : undefined;
-          return {
-            name,
-            category: typeof place.category === "string" ? place.category : undefined,
-            highlight:
-              typeof place.highlight === "string"
-                ? place.highlight
-                : typeof place.description === "string"
-                ? place.description
-                : undefined,
-            website:
-              typeof place.website === "string"
-                ? place.website
-                : typeof place.url === "string"
-                ? place.url
-                : null,
-            images: toImageArray(place.images ?? place.image),
-            coordinates,
-          } satisfies PlanPlace;
-        })
-        .filter((place) => place.name.trim().length > 0);
+const pickCoverImage = (locations: PlanLocation[]): string => {
+  for (const location of locations) {
+    for (const place of location.places) {
+      if (place.images.length > 0) {
+        return place.images[0];
+      }
+    }
+  }
+  return FALLBACK_PLACE_IMAGE;
+};
 
-      return { location, places } satisfies PlanLocation;
-    })
-    .filter((location) => location.places.length > 0);
+const extractTripsFromPayload = (payload: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
+  if (typeof payload === "string") {
+    try {
+      const parsed = JSON.parse(payload);
+      return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  if (payload && typeof payload === "object") {
+    const typed = payload as Record<string, unknown>;
+    if (Array.isArray(typed.trips)) return typed.trips as Record<string, unknown>[];
+    if (Array.isArray(typed.data)) return typed.data as Record<string, unknown>[];
+    if (typed.planResult) return [typed];
+    if (typed.body) {
+      if (Array.isArray(typed.body)) return typed.body as Record<string, unknown>[];
+      if (typeof typed.body === "string") {
+        try {
+          const parsed = JSON.parse(typed.body as string);
+          return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+        } catch {
+          return [];
+        }
+      }
+    }
+  }
+  return [];
+};
 
+const toCoordinatesObject = (value: unknown): Coordinates | null => {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const lat = toNumber(source.lat ?? source.latitude);
+  const lon = toNumber(source.lon ?? source.lng ?? source.longitude);
+  return lat != null && lon != null ? ({ lat, lon } satisfies Coordinates) : null;
+};
+
+const sanitizePlanPlace = (payload: unknown, index: number): PlanPlace | null => {
+  const place = (payload ?? {}) as Record<string, unknown>;
+  const name = typeof place.name === "string" && place.name.trim().length > 0 ? place.name : `Attraction ${index + 1}`;
+  const coordinates = toCoordinatesObject(place.coordinates ?? null);
   return {
-    summary,
+    name,
+    category: typeof place.category === "string" ? place.category : undefined,
+    highlight: typeof place.highlight === "string" ? place.highlight : undefined,
+    website: typeof place.website === "string" ? place.website : null,
+    images: toImageArray(place.images ?? place.image),
+    coordinates,
+  } satisfies PlanPlace;
+};
+
+const sanitizePlanLocation = (payload: unknown, index: number): PlanLocation | null => {
+  const location = (payload ?? {}) as Record<string, unknown>;
+  const title = typeof location.location === "string" && location.location.trim().length > 0 ? location.location : `Stop ${index + 1}`;
+  const rawPlaces = Array.isArray(location.places) ? location.places : [];
+  const places = rawPlaces
+    .map((place, placeIndex) => sanitizePlanPlace(place, placeIndex))
+    .filter((place): place is PlanPlace => Boolean(place?.name));
+  if (places.length === 0) return null;
+  return { location: title, places } satisfies PlanLocation;
+};
+
+const sanitizePlanResult = (payload: unknown): PlanResult => {
+  const plan = (payload ?? {}) as Record<string, unknown>;
+  const rawLocations = Array.isArray(plan.locations) ? plan.locations : [];
+  const locations = rawLocations
+    .map((entry, index) => sanitizePlanLocation(entry, index))
+    .filter((location): location is PlanLocation => Boolean(location));
+  return {
+    summary: typeof plan.summary === "string" ? plan.summary : "",
     locations,
-  };
+  } satisfies PlanResult;
 };
 
 const Dashboard = () => {
@@ -323,6 +360,19 @@ const Dashboard = () => {
   const [mapData, setMapData] = useState<{ markers: RouteMapMarker[]; routeLine: Coordinates[] } | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
+  const [focusCoordinate, setFocusCoordinate] = useState<Coordinates | null>(null);
+  const geoWatchRef = useRef<number | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [startFeedback, setStartFeedback] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [savingTrip, setSavingTrip] = useState(false);
+  const resetGeolocationWatch = () => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) return;
+    if (geoWatchRef.current != null) {
+      navigator.geolocation.clearWatch(geoWatchRef.current);
+      geoWatchRef.current = null;
+    }
+  };
   const transportRef = useRef<HTMLDivElement>(null);
   const [transportOpen, setTransportOpen] = useState(false);
   const selectedTransport = useMemo(
@@ -361,6 +411,35 @@ const Dashboard = () => {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+
+  useEffect(() => {
+    const resume = consumePlannerResume();
+    if (!resume) return;
+    setBasics({
+      start: resume.basics.start,
+      destination: resume.basics.destination,
+      stops: resume.basics.stops.length ? resume.basics.stops : [""],
+      startDate: resume.basics.startDate ? new Date(resume.basics.startDate) : null,
+      endDate: resume.basics.endDate ? new Date(resume.basics.endDate) : null,
+      flexibleDates: resume.basics.flexibleDates,
+    });
+    setPreferences(resume.preferences);
+    setPlanResult(sanitizePlanResult(resume.planSnapshot));
+    setPlannerMode("trip");
+  }, []);
+
+  useEffect(() => () => {
+    resetGeolocationWatch();
+  }, []);
+
+  useEffect(() => {
+    if (!planResult) {
+      setCurrentLocation(null);
+      setFocusCoordinate(null);
+      setStartFeedback(null);
+      resetGeolocationWatch();
+    }
+  }, [planResult]);
 
   const updateStop = (value: string, index: number) => {
     setBasics((prev) => {
@@ -404,10 +483,10 @@ const Dashboard = () => {
   const handleGenerateTrip = async () => {
     setPlanError(null);
     setPlanLoading(true);
-    const endpoint = PLAN_API_URL?.trim();
+    const endpoint = TRIPS_API_URL;
     if (!endpoint) {
       setPlanLoading(false);
-      setPlanError("Missing API endpoint configuration. Please add VITE_TRIP_PLAN_ENDPOINT to the .env file.");
+      setPlanError("Missing API base URL. Please add VITE_API_BASE_URL to the environment configuration.");
       return;
     }
     try {
@@ -424,12 +503,22 @@ const Dashboard = () => {
       }
 
       const payload = await response.json();
-      setPlanResult(parsePlanResponse(payload));
+      const trips = extractTripsFromPayload(payload);
+      if (!trips.length) {
+        throw new Error("Planner API did not return any trip data.");
+      }
+      const primaryTrip = trips[0];
+      setPlanResult(sanitizePlanResult(primaryTrip.planResult));
     } catch (error) {
       console.error("Trip planning failed", error);
       if (import.meta.env.DEV) {
-        console.warn("Falling back to sample AI response. Configure VITE_TRIP_PLAN_ENDPOINT for live data.");
-        setPlanResult(parsePlanResponse(samplePlanResponse));
+        console.warn("Falling back to sample trip response. Configure VITE_API_BASE_URL for live data.");
+        const fallbackTrips = extractTripsFromPayload(samplePlanResponse);
+        if (fallbackTrips.length) {
+          setPlanResult(sanitizePlanResult(fallbackTrips[0].planResult));
+        } else {
+          setPlanError("We could not load recommendations. Please try again.");
+        }
       } else {
         setPlanError("We could not load recommendations. Please try again.");
       }
@@ -450,6 +539,93 @@ const Dashboard = () => {
   const handlePlaceSearch = () => {
     console.log("Place search", placeExplore);
     alert("Search saved! We'll look for great spots matching your description.");
+  };
+
+  const buildSavedTripPayload = (): SavedTripRecord | null => {
+    if (!planResult) return null;
+    const now = new Date();
+    const title = `${basics.start || "Start"} → ${basics.destination || "Destination"}`;
+    const baseSlug = slugify(`${basics.start || "start"}-${basics.destination || "destination"}`);
+    const startDateIso = basics.startDate ? basics.startDate.toISOString() : null;
+    const endDateIso = basics.endDate ? basics.endDate.toISOString() : null;
+    const record: SavedTripRecord = {
+      id: `${baseSlug || "trip"}-${now.getTime()}`,
+      title,
+      createdAt: now.toISOString(),
+      startDate: startDateIso,
+      endDate: endDateIso,
+      categories: preferences.categories,
+      transport: selectedTransport?.label ?? preferences.transport,
+      summary: planResult.summary,
+      stopCount: planResult.locations.length,
+      coverImage: pickCoverImage(planResult.locations),
+      planSnapshot: planResult,
+      basics: {
+        start: basics.start,
+        destination: basics.destination,
+        stops: basics.stops,
+        startDate: startDateIso,
+        endDate: endDateIso,
+        flexibleDates: basics.flexibleDates,
+      },
+      preferences: {
+        categories: preferences.categories,
+        transport: preferences.transport,
+        budget: preferences.budget,
+        notes: preferences.notes,
+      },
+    };
+    return record;
+  };
+
+  const handleSaveTrip = () => {
+    if (!planResult) {
+      setSaveFeedback({ type: "error", message: "Generate a trip before saving it." });
+      return;
+    }
+    const payload = buildSavedTripPayload();
+    if (!payload) {
+      setSaveFeedback({ type: "error", message: "Missing trip details. Try generating again." });
+      return;
+    }
+    try {
+      setSavingTrip(true);
+      saveTripToStorage(payload);
+      setSaveFeedback({ type: "success", message: "Trip saved to My Trips." });
+    } catch (error) {
+      console.error("Save trip failed", error);
+      setSaveFeedback({ type: "error", message: "We could not save this trip. Please retry." });
+    } finally {
+      setSavingTrip(false);
+      window.setTimeout(() => setSaveFeedback(null), 5000);
+    }
+  };
+
+  const handleStartTrip = () => {
+    if (!planResult) {
+      setStartFeedback({ type: "error", message: "Generate a trip first to start navigation." });
+      return;
+    }
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setStartFeedback({ type: "error", message: "Geolocation is not supported in this browser." });
+      return;
+    }
+    resetGeolocationWatch();
+    setStartFeedback({ type: "info", message: "Locating you..." });
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const coords = { lat: position.coords.latitude, lon: position.coords.longitude } satisfies Coordinates;
+        setCurrentLocation(coords);
+        setFocusCoordinate(coords);
+        setStartFeedback({ type: "success", message: "Tracking live location. Move to update the map." });
+      },
+      (error) => {
+        console.error("Geolocation error", error);
+        setStartFeedback({ type: "error", message: "Unable to access location. Check permissions and try again." });
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+    geoWatchRef.current = watchId;
   };
 
   const lastStop = basics.stops[basics.stops.length - 1] ?? "";
@@ -571,8 +747,6 @@ const Dashboard = () => {
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">
             Dashboard
           </p>
-          {/* <ConnectGoogleCalendarButton /> */}
-            <SyncCalendarTripsButton />
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <h1 className="text-3xl font-semibold text-slate-900">Welcome back to TripGuardian</h1>
@@ -1022,7 +1196,12 @@ const Dashboard = () => {
                 <div className="mt-6 space-y-4">
                   <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-900/5">
                     {mapData && mapData.markers.length > 0 ? (
-                      <RouteMap markers={mapData.markers} routeLine={mapData.routeLine} />
+                      <RouteMap
+                        markers={mapData.markers}
+                        routeLine={mapData.routeLine}
+                        currentLocation={currentLocation}
+                        focusCoordinate={focusCoordinate}
+                      />
                     ) : (
                       <div className="flex h-64 items-center justify-center text-sm text-slate-500">
                         {mapLoading ? "Loading the map..." : "Map will appear once we obtain coordinates."}
@@ -1046,6 +1225,34 @@ const Dashboard = () => {
                       </p>
                     </div>
                   </div>
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveTrip}
+                      disabled={!planResult || savingTrip}
+                      className={`tg-btn tg-btn--secondary ${(!planResult || savingTrip) ? "opacity-70" : ""}`}
+                    >
+                      {savingTrip ? "Saving..." : "Save trip"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartTrip}
+                      disabled={!planResult}
+                      className={`tg-btn tg-btn--primary ${!planResult ? "opacity-70" : ""}`}
+                    >
+                      {startFeedback?.type === "info" ? "Locating..." : "Start trip"}
+                    </button>
+                  </div>
+                  {(saveFeedback || startFeedback) && (
+                    <div className="space-y-1 text-xs">
+                      {saveFeedback && (
+                        <p className={feedbackToneClass(saveFeedback.type)}>{saveFeedback.message}</p>
+                      )}
+                      {startFeedback && (
+                        <p className={feedbackToneClass(startFeedback.type)}>{startFeedback.message}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

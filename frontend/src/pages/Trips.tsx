@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   LuCalendar,
   LuFlag,
@@ -10,8 +10,9 @@ import {
   LuHeart,
   LuBookmark,
 } from "react-icons/lu";
+import { loadSavedTrips, SAVED_TRIPS_EVENT, stagePlannerResume, type SavedTripRecord } from "../utils/tripsStorage";
 
-const savedTrips = [
+const demoTrips = [
   {
     id: "bratislava-prague",
     title: "Bratislava → Praha",
@@ -50,8 +51,11 @@ const tagColors = [
   "bg-cyan-50 text-cyan-600",
 ];
 
+const FALLBACK_TRIP_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
+
 const Trips = () => {
   const auth = useAuth();
+  const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>(() => loadSavedTrips());
   const welcomeCopy = useMemo(
     () => ({
       heading: "Moje výlety",
@@ -59,6 +63,36 @@ const Trips = () => {
     }),
     []
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const syncTrips = () => setSavedTrips(loadSavedTrips());
+    window.addEventListener("storage", syncTrips);
+    window.addEventListener(SAVED_TRIPS_EVENT, syncTrips);
+    return () => {
+      window.removeEventListener("storage", syncTrips);
+      window.removeEventListener(SAVED_TRIPS_EVENT, syncTrips);
+    };
+  }, []);
+
+  const navigate = useNavigate();
+  const hasSavedTrips = savedTrips.length > 0;
+  const formatDate = (value: string | null) => {
+    if (!value) return "Flexibilné dátumy";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("sk-SK");
+  };
+  const formatDateRange = (start: string | null, end: string | null) => {
+    if (start && end) return `${formatDate(start)} - ${formatDate(end)}`;
+    if (start || end) return formatDate(start ?? end);
+    return "Flexibilné dátumy";
+  };
+
+  const handleResumeTrip = (trip: SavedTripRecord) => {
+    stagePlannerResume(trip);
+    navigate("/dashboard");
+  };
 
   return (
     <section className="bg-slate-50 py-12">
@@ -92,61 +126,128 @@ const Trips = () => {
         )}
 
         <section className="grid gap-6 md:grid-cols-2">
-          {savedTrips.map((trip, index) => (
-            <article key={trip.id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_25px_65px_rgba(15,23,42,0.08)]">
-              <div className="relative aspect-[16/9] w-full overflow-hidden">
-                <img src={trip.image} alt={trip.title} className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
-                  aria-label="Uložiť medzi obľúbené"
-                >
-                  <LuBookmark aria-hidden />
-                </button>
-              </div>
-              <div className="flex flex-col gap-4 px-6 py-5">
-                <div className="flex items-center justify-between text-sm text-slate-400">
-                  <span>Vytvorené {trip.createdAt}</span>
-                  <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Zdieľať
-                    <LuArrowUpRight className="text-base" aria-hidden />
-                  </button>
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                    <span className="inline-flex items-center gap-2">
-                      <LuCalendar aria-hidden />
-                      {trip.startDate} - {trip.endDate}
+          {hasSavedTrips
+            ? savedTrips.map((trip, index) => (
+                <article key={trip.id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_25px_65px_rgba(15,23,42,0.08)]">
+                  <div className="relative aspect-[16/9] w-full overflow-hidden">
+                    <img src={trip.coverImage || FALLBACK_TRIP_IMAGE} alt={trip.title} className="h-full w-full object-cover" />
+                    <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-emerald-600">
+                      AI itinerár
                     </span>
-                    <span className="inline-flex items-center gap-2">
-                      <LuWallet aria-hidden />
-                      Rozpočet: €{trip.budget}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {trip.tags.map((tag, tagIndex) => (
-                    <span
-                      key={`${trip.id}-tag-${tag}`}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
+                    <button
+                      type="button"
+                      className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
+                      aria-label="Uložiť medzi obľúbené"
                     >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                  <Link to={`/trips/${trip.id}`} className="tg-btn tg-btn--primary flex-1 justify-center">
-                    Otvoriť výlet
-                  </Link>
-                  <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
-                    <LuHeart aria-hidden />
-                    Obľúbený
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
+                      <LuBookmark aria-hidden />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-4 px-6 py-5">
+                    <div className="flex items-center justify-between text-sm text-slate-400">
+                      <span>Uložené {formatDate(trip.createdAt)}</span>
+                      <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-500">
+                        Pripravené na cestu
+                      </span>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
+                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <LuCalendar aria-hidden />
+                          {formatDateRange(trip.startDate, trip.endDate)}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <LuFlag aria-hidden />
+                          {trip.stopCount} zastávok
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <LuMapPin aria-hidden />
+                          Transport: {trip.transport}
+                        </span>
+                      </div>
+                    </div>
+                    {trip.summary && <p className="text-sm text-slate-600">{trip.summary}</p>}
+                    <div className="flex flex-wrap gap-2">
+                      {(trip.categories.length ? trip.categories : ["Itinerár"]).map((tag, tagIndex) => (
+                        <span
+                          key={`${trip.id}-tag-${tag}-${tagIndex}`}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => handleResumeTrip(trip)}
+                        className="tg-btn tg-btn--primary flex-1 justify-center"
+                      >
+                        Pokračovať v plánovaní
+                      </button>
+                      <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
+                        <LuHeart aria-hidden />
+                        Obľúbený
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))
+            : demoTrips.map((trip, index) => (
+                <article key={trip.id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_25px_65px_rgba(15,23,42,0.08)]">
+                  <div className="relative aspect-[16/9] w-full overflow-hidden">
+                    <img src={trip.image} alt={trip.title} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
+                      aria-label="Uložiť medzi obľúbené"
+                    >
+                      <LuBookmark aria-hidden />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-4 px-6 py-5">
+                    <div className="flex items-center justify-between text-sm text-slate-400">
+                      <span>Vytvorené {trip.createdAt}</span>
+                      <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Zdieľať
+                        <LuArrowUpRight className="text-base" aria-hidden />
+                      </button>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
+                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <LuCalendar aria-hidden />
+                          {trip.startDate} - {trip.endDate}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <LuWallet aria-hidden />
+                          Rozpočet: €{trip.budget}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {trip.tags.map((tag, tagIndex) => (
+                        <span
+                          key={`${trip.id}-tag-${tag}`}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                      <Link to={`/trips/${trip.id}`} className="tg-btn tg-btn--primary flex-1 justify-center">
+                        Otvoriť výlet
+                      </Link>
+                      <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
+                        <LuHeart aria-hidden />
+                        Obľúbený
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
         </section>
 
         <section className="rounded-3xl border border-slate-100 bg-white px-6 py-8 shadow-[0_25px_65px_rgba(15,23,42,0.07)]">
