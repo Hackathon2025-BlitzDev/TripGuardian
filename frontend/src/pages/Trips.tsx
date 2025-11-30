@@ -1,41 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { Link, useNavigate } from "react-router-dom";
 import {
   LuCalendar,
   LuFlag,
   LuMapPin,
-  LuWallet,
-  LuArrowUpRight,
   LuHeart,
   LuBookmark,
 } from "react-icons/lu";
-import { loadSavedTrips, SAVED_TRIPS_EVENT, stagePlannerResume, type SavedTripRecord } from "../utils/tripsStorage";
-
-const demoTrips = [
-  {
-    id: "bratislava-prague",
-    title: "Bratislava → Praha",
-    createdAt: "20. 11. 2025",
-    startDate: "1. 12. 2025",
-    endDate: "3. 12. 2025",
-    tags: ["kultúra", "príroda", "gastrotipy"],
-    budget: 500,
-    image:
-      "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=900&q=80",
-  },
-  {
-    id: "kosice-tatry",
-    title: "Košice → Tatry",
-    createdAt: "22. 11. 2025",
-    startDate: "15. 12. 2025",
-    endDate: "17. 12. 2025",
-    tags: ["príroda", "šport"],
-    budget: 380,
-    image:
-      "https://images.unsplash.com/photo-1470246973918-29a93221c455?auto=format&fit=crop&w=900&q=80",
-  },
-];
+import { fetchSavedTrips } from "../api/savedTrips";
+import type { SavedTripRecord } from "../utils/tripsStorage";
 
 const plannedRoutes = [
   { id: 1, title: "Lisabon → Porto", start: "5. 1. 2026", status: "AI itinerár sa generuje", progress: 65 },
@@ -52,10 +26,75 @@ const tagColors = [
 ];
 
 const FALLBACK_TRIP_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
+const buildAttractionImageUrl = (placeName: string, locationName?: string) => {
+  const terms = [placeName, locationName].filter(Boolean).join(", ").trim() || "travel destination";
+  return `https://source.unsplash.com/900x600/?${encodeURIComponent(terms)}`;
+};
+
+const tryParseJson = (value: unknown): Record<string, unknown> | null => {
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+};
+
+const extractPlanLocations = (snapshot: unknown): unknown[] => {
+  if (!snapshot) return [];
+  const source = tryParseJson(snapshot);
+  if (!source) return [];
+  if (Array.isArray(source.locations)) return source.locations;
+  if (source.planResult && typeof source.planResult === "object") {
+    const nested = source.planResult as Record<string, unknown>;
+    if (Array.isArray(nested.locations)) return nested.locations;
+  }
+  return [];
+};
+
+const extractPlaceImage = (place: unknown, locationName?: string): string | null => {
+  if (!place || typeof place !== "object") return null;
+  const record = place as Record<string, unknown>;
+  if (Array.isArray(record.images)) {
+    const valid = record.images.find((img) => typeof img === "string" && img.trim().length > 0);
+    if (typeof valid === "string") return valid;
+  }
+  const imageLikeKeys = ["image_url", "image", "photo"] as const;
+  for (const key of imageLikeKeys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  const name = typeof record.name === "string" ? record.name : "attraction";
+  return buildAttractionImageUrl(name, locationName);
+};
+
+const deriveTripImage = (trip: SavedTripRecord): string => {
+  if (trip.coverImage && trip.coverImage.trim().length > 0) return trip.coverImage;
+  const snapshotSource = trip.planSnapshot ?? (trip as Record<string, unknown>).planResult;
+  const locations = extractPlanLocations(snapshotSource);
+  for (const location of locations) {
+    if (!location || typeof location !== "object") continue;
+    const record = location as Record<string, unknown>;
+    const locationName = typeof record.location === "string" ? record.location : undefined;
+    const places = Array.isArray(record.places) ? record.places : [];
+    for (const place of places) {
+      const image = extractPlaceImage(place, locationName);
+      if (image) return image;
+    }
+  }
+  return buildAttractionImageUrl(trip.title || "trip");
+};
 
 const Trips = () => {
   const auth = useAuth();
-  const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>(() => loadSavedTrips());
+  const navigate = useNavigate();
+  const [savedTrips, setSavedTrips] = useState<SavedTripRecord[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(true);
+  const [tripsError, setTripsError] = useState<string | null>(null);
   const welcomeCopy = useMemo(
     () => ({
       heading: "Moje výlety",
@@ -63,42 +102,46 @@ const Trips = () => {
     }),
     []
   );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const syncTrips = () => setSavedTrips(loadSavedTrips());
-    window.addEventListener("storage", syncTrips);
-    window.addEventListener(SAVED_TRIPS_EVENT, syncTrips);
-    return () => {
-      window.removeEventListener("storage", syncTrips);
-      window.removeEventListener(SAVED_TRIPS_EVENT, syncTrips);
-    };
+  const loadTrips = useCallback(async () => {
+    setTripsError(null);
+    setLoadingTrips(true);
+    try {
+      const data = await fetchSavedTrips();
+      setSavedTrips(data);
+    } catch (error) {
+      console.error("Failed to load saved trips", error);
+      const message = error instanceof Error ? error.message : "Nepodarilo sa načítať uložené výlety.";
+      setTripsError(message);
+    } finally {
+      setLoadingTrips(false);
+    }
   }, []);
 
-  const navigate = useNavigate();
+  useEffect(() => {
+    void loadTrips();
+  }, [loadTrips]);
+
   const hasSavedTrips = savedTrips.length > 0;
-  const formatDate = (value: string | null) => {
+  const formatDate = (value: string | null | undefined) => {
     if (!value) return "Flexibilné dátumy";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString("sk-SK");
   };
-  const formatDateRange = (start: string | null, end: string | null) => {
+  const formatDateRange = (start: string | null | undefined, end: string | null | undefined) => {
     if (start && end) return `${formatDate(start)} - ${formatDate(end)}`;
     if (start || end) return formatDate(start ?? end);
     return "Flexibilné dátumy";
   };
 
   const handleResumeTrip = (trip: SavedTripRecord) => {
-    stagePlannerResume(trip);
-    navigate("/dashboard");
+    navigate("/dashboard", { state: { resumeTrip: trip } });
   };
 
   return (
     <section className="bg-slate-50 py-12">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 sm:px-6">
         <header className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">Trips</p>
           <h1 className="text-3xl font-semibold text-slate-900">{welcomeCopy.heading}</h1>
           <p className="text-base text-slate-500">{welcomeCopy.subheading}</p>
         </header>
@@ -125,130 +168,104 @@ const Trips = () => {
           </div>
         )}
 
-        <section className="grid gap-6 md:grid-cols-2">
-          {hasSavedTrips
-            ? savedTrips.map((trip, index) => (
+        {tripsError && (
+          <div className="rounded-3xl border border-red-100 bg-red-50/80 px-5 py-4 text-sm text-red-600">
+            {tripsError}
+            <button type="button" onClick={() => loadTrips()} className="ml-4 text-red-700 underline">
+              Skúsiť znova
+            </button>
+          </div>
+        )}
+
+        {loadingTrips && (
+          <div className="rounded-3xl border border-slate-200 bg-white/70 px-6 py-5 text-center text-sm text-slate-500">
+            Načítavam uložené výlety...
+          </div>
+        )}
+
+        {hasSavedTrips && !loadingTrips && !tripsError && (
+          <section className="grid gap-6 md:grid-cols-2">
+            {savedTrips.map((trip, index) => {
+              const heroImage = deriveTripImage(trip);
+              return (
                 <article key={trip.id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_25px_65px_rgba(15,23,42,0.08)]">
-                  <div className="relative aspect-[16/9] w-full overflow-hidden">
-                    <img src={trip.coverImage || FALLBACK_TRIP_IMAGE} alt={trip.title} className="h-full w-full object-cover" />
-                    <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-emerald-600">
-                      AI itinerár
+                <div className="relative aspect-[16/9] w-full overflow-hidden">
+                  <img src={heroImage || FALLBACK_TRIP_IMAGE} alt={trip.title} className="h-full w-full object-cover" />
+                  <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-emerald-600">
+                    AI itinerár
+                  </span>
+                  <button
+                    type="button"
+                    className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
+                    aria-label="Uložiť medzi obľúbené"
+                  >
+                    <LuBookmark aria-hidden />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-4 px-6 py-5">
+                  <div className="flex items-center justify-between text-sm text-slate-400">
+                    <span>Uložené {formatDate(trip.createdAt)}</span>
+                    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-500">
+                      Pripravené na cestu
                     </span>
-                    <button
-                      type="button"
-                      className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
-                      aria-label="Uložiť medzi obľúbené"
-                    >
-                      <LuBookmark aria-hidden />
-                    </button>
                   </div>
-                  <div className="flex flex-col gap-4 px-6 py-5">
-                    <div className="flex items-center justify-between text-sm text-slate-400">
-                      <span>Uložené {formatDate(trip.createdAt)}</span>
-                      <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-500">
-                        Pripravené na cestu
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
+                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                      <span className="inline-flex items-center gap-2">
+                        <LuCalendar aria-hidden />
+                        {formatDateRange(trip.startDate, trip.endDate)}
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <LuFlag aria-hidden />
+                        {trip.stopCount} zastávok
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <LuMapPin aria-hidden />
+                        Transport: {trip.transport}
                       </span>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
-                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                        <span className="inline-flex items-center gap-2">
-                          <LuCalendar aria-hidden />
-                          {formatDateRange(trip.startDate, trip.endDate)}
-                        </span>
-                        <span className="inline-flex items-center gap-2">
-                          <LuFlag aria-hidden />
-                          {trip.stopCount} zastávok
-                        </span>
-                        <span className="inline-flex items-center gap-2">
-                          <LuMapPin aria-hidden />
-                          Transport: {trip.transport}
-                        </span>
-                      </div>
-                    </div>
-                    {trip.summary && <p className="text-sm text-slate-600">{trip.summary}</p>}
-                    <div className="flex flex-wrap gap-2">
-                      {(trip.categories.length ? trip.categories : ["Itinerár"]).map((tag, tagIndex) => (
-                        <span
-                          key={`${trip.id}-tag-${tag}-${tagIndex}`}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                      <button
-                        type="button"
-                        onClick={() => handleResumeTrip(trip)}
-                        className="tg-btn tg-btn--primary flex-1 justify-center"
-                      >
-                        Pokračovať v plánovaní
-                      </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
-                        <LuHeart aria-hidden />
-                        Obľúbený
-                      </button>
-                    </div>
                   </div>
-                </article>
-              ))
-            : demoTrips.map((trip, index) => (
-                <article key={trip.id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_25px_65px_rgba(15,23,42,0.08)]">
-                  <div className="relative aspect-[16/9] w-full overflow-hidden">
-                    <img src={trip.image} alt={trip.title} className="h-full w-full object-cover" />
+                  {trip.summary && <p className="text-sm text-slate-600">{trip.summary}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {((Array.isArray(trip.categories) && trip.categories.length ? trip.categories : ["Itinerár"]) as string[]).map((tag, tagIndex) => (
+                      <span
+                        key={`${trip.id}-tag-${tag}-${tagIndex}`}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
                     <button
                       type="button"
-                      className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-500 shadow hover:text-slate-900"
-                      aria-label="Uložiť medzi obľúbené"
+                      onClick={() => handleResumeTrip(trip)}
+                      className="tg-btn tg-btn--primary flex-1 justify-center"
                     >
-                      <LuBookmark aria-hidden />
+                      Pokračovať v plánovaní
+                    </button>
+                    <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
+                      <LuHeart aria-hidden />
+                      Obľúbený
                     </button>
                   </div>
-                  <div className="flex flex-col gap-4 px-6 py-5">
-                    <div className="flex items-center justify-between text-sm text-slate-400">
-                      <span>Vytvorené {trip.createdAt}</span>
-                      <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Zdieľať
-                        <LuArrowUpRight className="text-base" aria-hidden />
-                      </button>
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-slate-900">{trip.title}</h2>
-                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                        <span className="inline-flex items-center gap-2">
-                          <LuCalendar aria-hidden />
-                          {trip.startDate} - {trip.endDate}
-                        </span>
-                        <span className="inline-flex items-center gap-2">
-                          <LuWallet aria-hidden />
-                          Rozpočet: €{trip.budget}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {trip.tags.map((tag, tagIndex) => (
-                        <span
-                          key={`${trip.id}-tag-${tag}`}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${tagColors[(index + tagIndex) % tagColors.length]}`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                      <Link to={`/trips/${trip.id}`} className="tg-btn tg-btn--primary flex-1 justify-center">
-                        Otvoriť výlet
-                      </Link>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
-                        <LuHeart aria-hidden />
-                        Obľúbený
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-        </section>
+                </div>
+              </article>
+            );
+          })}
+          </section>
+        )}
+
+        {!loadingTrips && !tripsError && !hasSavedTrips && (
+          <div className="rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center text-slate-500 shadow-[0_20px_55px_rgba(15,23,42,0.08)]">
+            <p className="text-base font-semibold text-slate-800">Zatiaľ nemáte žiadne uložené výlety.</p>
+            <p className="mt-2 text-sm">Naplánujte trasu v sekcii Dashboard a kliknite na Save trip.</p>
+            <Link to="/dashboard" className="tg-btn tg-btn--primary mt-4 inline-flex justify-center">
+              Prejsť do plánovača
+            </Link>
+          </div>
+        )}
 
         <section className="rounded-3xl border border-slate-100 bg-white px-6 py-8 shadow-[0_25px_65px_rgba(15,23,42,0.07)]">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">

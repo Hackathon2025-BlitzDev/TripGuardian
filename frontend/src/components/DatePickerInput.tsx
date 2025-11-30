@@ -11,7 +11,7 @@ type DatePickerInputProps = {
   maxDate?: Date;
 };
 
-const DatePickerInput = forwardRef<HTMLInputElement, DatePickerInputProps>(
+const DatePickerInput = forwardRef<InstanceType<typeof DatePicker>, DatePickerInputProps>(
   ({ value, onChange, placeholder, className = "", minDate, maxDate }, ref) => {
     return (
       <DatePicker

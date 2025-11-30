@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
   LuArrowUpRight,
@@ -34,7 +34,8 @@ import DatePickerInput from "../components/DatePickerInput";
 import LocationAutocomplete from "../components/LocationAutocomplete";
 import RouteMap, { type RouteMapMarker } from "../components/RouteMap";
 import samplePlanResponse from "../mocks/samplePlanResponse";
-import { consumePlannerResume, saveTripToStorage, type SavedTripRecord } from "../utils/tripsStorage";
+import { createSavedTrip } from "../api/savedTrips";
+import type { SavedTripRecord } from "../utils/tripsStorage";
 // import { ConnectGoogleCalendarButton } from "../components/ConnectGoogleCalendarButton";
 
 const stats: { label: string; value: string; path?: string }[] = [
@@ -127,6 +128,10 @@ type TripPlanRequestPayload = {
 
 type FeedbackTone = "success" | "error" | "info";
 
+type DashboardLocationState = {
+  resumeTrip?: SavedTripRecord;
+} | null;
+
 const buildTripsApiUrl = () => {
   const base = import.meta.env.VITE_API_BASE_URL;
   if (!base) return undefined;
@@ -139,11 +144,17 @@ const buildTripsApiUrl = () => {
 };
 
 const TRIPS_API_URL = buildTripsApiUrl();
-const FALLBACK_PLACE_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
 const geocodeCache = new Map<string, Coordinates | null>();
 const OSRM_BASE_URL = "https://router.project-osrm.org";
 
 const normalizeDate = (value: Date | null) => (value ? value.toISOString() : null);
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const buildAttractionImageUrl = (placeName: string, locationName?: string) => {
+  const terms = [placeName, locationName].filter(Boolean).join(", ").trim() || "travel destination";
+  return `https://source.unsplash.com/800x600/?${encodeURIComponent(terms)}`;
+};
 
 const createTripPlanRequestPayload = (basics: BasicsState, preferences: PreferencesState): TripPlanRequestPayload => ({
   basics: {
@@ -249,12 +260,11 @@ const feedbackToneClass = (tone: FeedbackTone) => {
 const pickCoverImage = (locations: PlanLocation[]): string => {
   for (const location of locations) {
     for (const place of location.places) {
-      if (place.images.length > 0) {
-        return place.images[0];
-      }
+      const primary = place.images[0] ?? buildAttractionImageUrl(place.name, location.location);
+      if (primary) return primary;
     }
   }
-  return FALLBACK_PLACE_IMAGE;
+  return buildAttractionImageUrl("adventure trip");
 };
 
 const extractTripsFromPayload = (payload: unknown): Record<string, unknown>[] => {
@@ -295,16 +305,20 @@ const toCoordinatesObject = (value: unknown): Coordinates | null => {
   return lat != null && lon != null ? ({ lat, lon } satisfies Coordinates) : null;
 };
 
-const sanitizePlanPlace = (payload: unknown, index: number): PlanPlace | null => {
+const sanitizePlanPlace = (payload: unknown, index: number, parentLocation?: string): PlanPlace | null => {
   const place = (payload ?? {}) as Record<string, unknown>;
   const name = typeof place.name === "string" && place.name.trim().length > 0 ? place.name : `Attraction ${index + 1}`;
   const coordinates = toCoordinatesObject(place.coordinates ?? null);
+  const baseImages = toImageArray(place.images ?? place.image);
+  const imageUrl = typeof place.image_url === "string" && place.image_url.trim().length > 0 ? place.image_url : null;
+  const combined = imageUrl ? [...baseImages, imageUrl] : baseImages;
+  const images = combined.length > 0 ? combined : [buildAttractionImageUrl(name, parentLocation)];
   return {
     name,
     category: typeof place.category === "string" ? place.category : undefined,
     highlight: typeof place.highlight === "string" ? place.highlight : undefined,
     website: typeof place.website === "string" ? place.website : null,
-    images: toImageArray(place.images ?? place.image),
+    images,
     coordinates,
   } satisfies PlanPlace;
 };
@@ -314,7 +328,7 @@ const sanitizePlanLocation = (payload: unknown, index: number): PlanLocation | n
   const title = typeof location.location === "string" && location.location.trim().length > 0 ? location.location : `Stop ${index + 1}`;
   const rawPlaces = Array.isArray(location.places) ? location.places : [];
   const places = rawPlaces
-    .map((place, placeIndex) => sanitizePlanPlace(place, placeIndex))
+    .map((place, placeIndex) => sanitizePlanPlace(place, placeIndex, title))
     .filter((place): place is PlanPlace => Boolean(place?.name));
   if (places.length === 0) return null;
   return { location: title, places } satisfies PlanLocation;
@@ -357,11 +371,15 @@ const Dashboard = () => {
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [aiThinking, setAiThinking] = useState(false);
   const [mapData, setMapData] = useState<{ markers: RouteMapMarker[]; routeLine: Coordinates[] } | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
   const [focusCoordinate, setFocusCoordinate] = useState<Coordinates | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const resumeTrip = (location.state as DashboardLocationState | undefined)?.resumeTrip ?? null;
   const geoWatchRef = useRef<number | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [startFeedback, setStartFeedback] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -413,20 +431,23 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    const resume = consumePlannerResume();
-    if (!resume) return;
+    if (!resumeTrip) return;
     setBasics({
-      start: resume.basics.start,
-      destination: resume.basics.destination,
-      stops: resume.basics.stops.length ? resume.basics.stops : [""],
-      startDate: resume.basics.startDate ? new Date(resume.basics.startDate) : null,
-      endDate: resume.basics.endDate ? new Date(resume.basics.endDate) : null,
-      flexibleDates: resume.basics.flexibleDates,
+      start: resumeTrip.basics.start,
+      destination: resumeTrip.basics.destination,
+      stops: resumeTrip.basics.stops.length ? resumeTrip.basics.stops : [""],
+      startDate: resumeTrip.basics.startDate ? new Date(resumeTrip.basics.startDate) : null,
+      endDate: resumeTrip.basics.endDate ? new Date(resumeTrip.basics.endDate) : null,
+      flexibleDates: resumeTrip.basics.flexibleDates,
     });
-    setPreferences(resume.preferences);
-    setPlanResult(sanitizePlanResult(resume.planSnapshot));
+    setPreferences(resumeTrip.preferences);
+    setPlanResult(sanitizePlanResult(resumeTrip.planSnapshot));
     setPlannerMode("trip");
-  }, []);
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: null }
+    );
+  }, [resumeTrip, navigate, location.pathname, location.search]);
 
   useEffect(() => () => {
     resetGeolocationWatch();
@@ -482,14 +503,17 @@ const Dashboard = () => {
 
   const handleGenerateTrip = async () => {
     setPlanError(null);
+    setAiThinking(true);
     setPlanLoading(true);
     const endpoint = TRIPS_API_URL;
     if (!endpoint) {
       setPlanLoading(false);
+      setAiThinking(false);
       setPlanError("Missing API base URL. Please add VITE_API_BASE_URL to the environment configuration.");
       return;
     }
     try {
+      await wait(3000);
       const requestPayload = createTripPlanRequestPayload(basics, preferences);
       console.log("Trip plan request payload:", JSON.stringify(requestPayload, null, 2));
       const response = await fetch(endpoint, {
@@ -524,6 +548,7 @@ const Dashboard = () => {
       }
     } finally {
       setPlanLoading(false);
+      setAiThinking(false);
     }
   };
 
@@ -578,7 +603,7 @@ const Dashboard = () => {
     return record;
   };
 
-  const handleSaveTrip = () => {
+  const handleSaveTrip = async () => {
     if (!planResult) {
       setSaveFeedback({ type: "error", message: "Generate a trip before saving it." });
       return;
@@ -590,11 +615,12 @@ const Dashboard = () => {
     }
     try {
       setSavingTrip(true);
-      saveTripToStorage(payload);
+      await createSavedTrip(payload);
       setSaveFeedback({ type: "success", message: "Trip saved to My Trips." });
     } catch (error) {
       console.error("Save trip failed", error);
-      setSaveFeedback({ type: "error", message: "We could not save this trip. Please retry." });
+      const message = error instanceof Error ? error.message : "We could not save this trip. Please retry.";
+      setSaveFeedback({ type: "error", message });
     } finally {
       setSavingTrip(false);
       window.setTimeout(() => setSaveFeedback(null), 5000);
@@ -630,6 +656,11 @@ const Dashboard = () => {
 
   const lastStop = basics.stops[basics.stops.length - 1] ?? "";
   const canAddStop = lastStop.trim().length > 0;
+  const thinkingMessage = aiThinking
+    ? "AI premýšľa nad ideálnou trasou..."
+    : planLoading
+    ? "AI dokončuje odporúčania podľa vašich preferencií..."
+    : null;
 
   useEffect(() => {
     if (!planResult) {
@@ -1087,17 +1118,31 @@ const Dashboard = () => {
                       disabled={planLoading}
                       className={`tg-btn tg-btn--primary gap-4 ${planLoading ? "opacity-70" : ""}`}
                     >
-                      {planLoading ? "Generating..." : "Generate trip"}
+                      {aiThinking ? "AI is thinking..." : planLoading ? "Generating..." : "Generate trip"}
                       <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm font-semibold">
                         {planLoading ? (
                           <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
                         ) : (
                           SelectedTransportIcon && <SelectedTransportIcon aria-hidden className="text-lg" />
                         )}
-                        <span>{planLoading ? "Working" : "Plan"}</span>
+                        <span>{aiThinking ? "Thinking" : planLoading ? "Working" : "Plan"}</span>
                       </span>
                     </button>
                   </div>
+                  {thinkingMessage && (
+                    <div className="mt-3 space-y-2" aria-live="polite">
+                      <div className="flex items-center gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-2 text-xs font-semibold text-indigo-700">
+                        <span className="inline-flex h-3 w-3 animate-pulse rounded-full bg-indigo-500" aria-hidden />
+                        <span>{thinkingMessage}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 animate-pulse"
+                          style={{ width: aiThinking ? "45%" : "100%" }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1295,11 +1340,13 @@ const Dashboard = () => {
                   </div>
 
                   <div className="mt-6 grid gap-5 md:grid-cols-2">
-                    {location.places.map((place) => (
-                      <div key={place.name} className="flex flex-col gap-4 rounded-2xl border border-slate-100 p-4">
+                    {location.places.map((place) => {
+                      const primaryImage = place.images[0] ?? buildAttractionImageUrl(place.name, location.location);
+                      return (
+                        <div key={place.name} className="flex flex-col gap-4 rounded-2xl border border-slate-100 p-4">
                         <div className="relative overflow-hidden rounded-2xl">
                           <img
-                            src={place.images[0] ?? FALLBACK_PLACE_IMAGE}
+                            src={primaryImage}
                             alt={place.name}
                             className="h-48 w-full object-cover"
                             loading="lazy"
@@ -1334,7 +1381,8 @@ const Dashboard = () => {
                           {place.highlight && <p className="text-sm text-slate-500">{place.highlight}</p>}
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 </article>
               ))}
