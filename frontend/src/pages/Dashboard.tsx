@@ -128,6 +128,7 @@ type TripPlanRequestPayload = {
 const PLAN_API_URL = import.meta.env.VITE_TRIP_PLAN_ENDPOINT;
 const FALLBACK_PLACE_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
 const geocodeCache = new Map<string, Coordinates | null>();
+const OSRM_BASE_URL = "https://router.project-osrm.org";
 
 const normalizeDate = (value: Date | null) => (value ? value.toISOString() : null);
 
@@ -192,6 +193,38 @@ const geocodeLabel = async (query: string): Promise<Coordinates | null> => {
   }
 };
 
+const fetchRoadSegment = async (from: Coordinates, to: Coordinates): Promise<Coordinates[] | null> => {
+  const url = new URL(`${OSRM_BASE_URL}/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}`);
+  url.searchParams.set("overview", "full");
+  url.searchParams.set("geometries", "geojson");
+
+  try {
+    const response = await fetch(url.toString());
+    if (!response.ok) return null;
+    const data = (await response.json()) as {
+      routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+    };
+    const coordinates = data.routes?.[0]?.geometry?.coordinates;
+    if (!coordinates || coordinates.length === 0) return null;
+    return coordinates.map(([lon, lat]) => ({ lat, lon } satisfies Coordinates));
+  } catch (error) {
+    console.error("OSRM segment fetch failed", error);
+    return null;
+  }
+};
+
+const buildRoadPolyline = async (nodes: Coordinates[]): Promise<Coordinates[] | null> => {
+  if (nodes.length < 2) return null;
+  const result: Coordinates[] = [];
+  for (let i = 0; i < nodes.length - 1; i += 1) {
+    const segment = await fetchRoadSegment(nodes[i], nodes[i + 1]);
+    if (!segment || segment.length === 0) return null;
+    if (i > 0) segment.shift();
+    result.push(...segment);
+  }
+  return result;
+};
+
 const parsePlanResponse = (payload: unknown): PlanResult => {
   const data = (payload ?? {}) as Record<string, unknown>;
   const summary = typeof data.text === "string" ? data.text : "";
@@ -205,7 +238,7 @@ const parsePlanResponse = (payload: unknown): PlanResult => {
       const location =
         typeof (tool.arguments as Record<string, unknown>)?.location === "string"
           ? ((tool.arguments as Record<string, unknown>).location as string)
-          : "Neznáma lokalita";
+          : "Unknown location";
       const placesSource = Array.isArray((tool.output as Record<string, unknown>)?.places)
         ? ((tool.output as Record<string, unknown>)?.places as unknown[])
         : [];
@@ -213,7 +246,7 @@ const parsePlanResponse = (payload: unknown): PlanResult => {
       const places: PlanPlace[] = placesSource
         .map((entry, index) => {
           const place = entry as Record<string, unknown>;
-          const name = typeof place.name === "string" ? place.name : `Atrakcia ${index + 1}`;
+          const name = typeof place.name === "string" ? place.name : `Attraction ${index + 1}`;
           const coordinatesSource =
             typeof place.coordinates === "object" && place.coordinates !== null
               ? (place.coordinates as Record<string, unknown>)
@@ -374,7 +407,7 @@ const Dashboard = () => {
     const endpoint = PLAN_API_URL?.trim();
     if (!endpoint) {
       setPlanLoading(false);
-      setPlanError("Chýba konfigurácia API endpointu. Doplnte VITE_TRIP_PLAN_ENDPOINT do .env súboru.");
+      setPlanError("Missing API endpoint configuration. Please add VITE_TRIP_PLAN_ENDPOINT to the .env file.");
       return;
     }
     try {
@@ -398,7 +431,7 @@ const Dashboard = () => {
         console.warn("Falling back to sample AI response. Configure VITE_TRIP_PLAN_ENDPOINT for live data.");
         setPlanResult(parsePlanResponse(samplePlanResponse));
       } else {
-        setPlanError("Nepodarilo sa načítať odporúčania. Skúste to prosím znova.");
+        setPlanError("We could not load recommendations. Please try again.");
       }
     } finally {
       setPlanLoading(false);
@@ -491,16 +524,24 @@ const Dashboard = () => {
           })
           .filter((node): node is Coordinates => Boolean(node));
 
-        const routeLine: Coordinates[] = [
+        const routeNodes: Coordinates[] = [
           ...(startCoord ? [startCoord] : []),
           ...locationNodes,
           ...(destinationCoord ? [destinationCoord] : []),
         ];
 
+        let routeLine: Coordinates[] = routeNodes;
+        if (routeNodes.length >= 2) {
+          const detailed = await buildRoadPolyline(routeNodes);
+          if (detailed && detailed.length >= 2) {
+            routeLine = detailed;
+          }
+        }
+
         if (!cancelled) {
           if (markers.length === 0) {
             setMapData(null);
-            setMapError("Na zobrazenie mapy chýbajú súradnice. Skúste doplniť presnejšie lokality.");
+            setMapError("We are missing coordinates to render the map. Please provide more precise locations.");
           } else {
             setMapData({ markers, routeLine });
           }
@@ -508,7 +549,7 @@ const Dashboard = () => {
       } catch (error) {
         console.error("Route map preparation failed", error);
         if (!cancelled) {
-          setMapError("Mapu sa nepodarilo načítať. Skúste to o chvíľu znova.");
+          setMapError("We could not load the map. Try again in a moment.");
           setMapData(null);
         }
       } finally {
@@ -530,6 +571,7 @@ const Dashboard = () => {
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">
             Dashboard
           </p>
+          {/* <ConnectGoogleCalendarButton /> */}
             <SyncCalendarTripsButton />
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -698,7 +740,7 @@ const Dashboard = () => {
                     {!basics.flexibleDates && (
                       <div className="grid gap-4 md:grid-cols-2">
                         <label className="grid gap-2 text-sm font-medium text-slate-600">
-                          Start date (optional)
+                         setMapError("We could not load the map. Try again in a moment.");
                           <DatePickerInput
                             value={basics.startDate}
                             onChange={(date) => setBasics((prev) => ({ ...prev, startDate: date }))}
@@ -958,7 +1000,7 @@ const Dashboard = () => {
                     <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
                       <span className="inline-flex items-center gap-2">
                         <LuMapPin aria-hidden className="text-indigo-500" />
-                        {planResult.locations.length} odporúčaných zastávok
+                        {planResult.locations.length} recommended stops
                       </span>
                       {!basics.flexibleDates && basics.startDate && basics.endDate && (
                         <span className="inline-flex items-center gap-2">
@@ -983,7 +1025,7 @@ const Dashboard = () => {
                       <RouteMap markers={mapData.markers} routeLine={mapData.routeLine} />
                     ) : (
                       <div className="flex h-64 items-center justify-center text-sm text-slate-500">
-                        {mapLoading ? "Načítavam mapu…" : "Mapa bude k dispozícii po získaní súradníc."}
+                        {mapLoading ? "Loading the map..." : "Map will appear once we obtain coordinates."}
                       </div>
                     )}
                   </div>
@@ -994,11 +1036,11 @@ const Dashboard = () => {
                       <p className="mt-1 font-semibold">{selectedTransport?.label}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Zastávky</p>
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Stops</p>
                       <p className="mt-1 font-semibold">{planResult.locations.length}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Odporúčané miesta</p>
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Recommended places</p>
                       <p className="mt-1 font-semibold">
                         {planResult.locations.reduce((total, loc) => total + loc.places.length, 0)}
                       </p>
@@ -1009,7 +1051,7 @@ const Dashboard = () => {
 
               <div className="flex flex-col gap-4">
                 <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">AI odporúčanie</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">AI recommendation</p>
                   <div className="mt-4 space-y-2 text-sm text-slate-600">
                     {planResult.summary
                       .split("\n")
@@ -1021,11 +1063,11 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Zdieľanie</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Sharing</p>
                   <div className="mt-3 flex flex-col gap-2">
-                    <button className="tg-btn tg-btn--secondary w-full justify-center">Exportovať do PDF</button>
-                    <button className="tg-btn tg-btn--secondary w-full justify-center">Exportovať do Excelu</button>
-                    <button className="tg-btn tg-btn--ghost w-full justify-center">Zdieľať odkaz</button>
+                    <button className="tg-btn tg-btn--secondary w-full justify-center">Export to PDF</button>
+                    <button className="tg-btn tg-btn--secondary w-full justify-center">Export to Excel</button>
+                    <button className="tg-btn tg-btn--ghost w-full justify-center">Share link</button>
                   </div>
                 </div>
               </div>
@@ -1036,12 +1078,12 @@ const Dashboard = () => {
                 <article key={location.location} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-[0_25px_65px_rgba(15,23,42,0.05)]">
                   <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">Zastávka</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">Stop</p>
                       <h4 className="text-2xl font-semibold text-slate-900">{location.location}</h4>
-                      <p className="text-sm text-slate-500">Odporúčané atrakcie pre túto oblasť</p>
+                      <p className="text-sm text-slate-500">Recommended attractions for this area</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-4 py-1 text-sm font-semibold text-slate-600">
-                      {location.places.length} miest
+                      {location.places.length} places
                     </span>
                   </div>
 

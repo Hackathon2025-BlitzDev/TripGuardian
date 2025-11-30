@@ -1,35 +1,30 @@
 const samplePlanResponse = {
-  text: "Na základe vyhľadávania som našiel niekoľko zaujímavých miest v Prešove a Levoči, ktoré by ste mohli navštíviť počas vašej cesty.\n\n### Zaujímavé miesta v Prešove:\n1. **Banská Bystrica – Námestie SNP**: Toto historické centrum je známe farebnými meštianskymi domami a remeselnými kaviarňami. Môžete sa tu prejsť a vychutnať si atmosféru mesta.\n2. **Motorest Zubor (Zvolen)**: Ak máte chuť na domáce jedlá, tento motorest ponúka rýchle obedy a je skvelým miestom na zastávku.\n\n### Zaujímavé miesta v Levoči:\n1. **Bazilika sv. Jakuba**: Gotická dominanta s najvyšším dreveným oltárom na svete.\n2. **Mestská radnica**: Renesančná budova so známou klietkou hanby.\n\n### Odporúčania na cestu:\n- Zastavte sa v Prešove a ochutnajte lokálnu kávu.\n- Pokračujte do Levoče a spoznajte UNESCO pamiatky.\n- Využite prestávku na obed v Motoreste Zubor.",
+  text: "Driving from Košice to Bratislava lets you add four iconic breaks: panoramic Spišský hrad, modern art inside Oravská galéria, the craft heritage of Budatínsky hrad, and sunset views from Trenčiansky hrad. Each stop sits just off the main route, so you can visit them all within a single day.",
   context: {
     mode: "mock",
-    query: "Idem z Košíc do Bratislavy, mám 2 hodiny navyše, odporuč mi zaujímavé zastávky.",
+    query: "Plan a trip from Košice to Bratislava and include iconic stopovers.",
     tools_used: [
       {
         name: "PlacesSearchTool",
         arguments: {
-          location: "Prešov",
-          categories: ["culture", "cafe"],
+          location: "Spišské Podhradie / Levoča",
+          categories: ["unesco", "history"],
         },
         output: {
           places: [
             {
-              name: "Banská Bystrica – Námestie SNP",
-              category: "Historic center",
-              highlight: "Farebné meštianske domy, kaviarne a pokojná atmosféra historického jadra.",
-              website: "https://www.visitbanskabystrica.sk",
+              name: "Spišský hrad (UNESCO)",
+              category: "UNESCO",
+              highlight: "The largest castle complex in Central Europe with sweeping views of Levoča and the High Tatras.",
+              website: "https://www.spisskemuzeum.com/spissky-hrad/",
+              coordinates: {
+                lat: 48.9997,
+                lon: 20.7686,
+              },
               images: [
-                "https://images.unsplash.com/photo-1528901166007-3784c7dd3653?auto=format&fit=crop&w=900&q=80",
-                "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=900&q=80",
-              ],
-            },
-            {
-              name: "Motorest Zubor",
-              category: "Food",
-              highlight: "Domáce špeciality, rýchle obedy a parkovanie pri hlavnej trase.",
-              website: "https://motorestzubor.sk",
-              images: [
-                "https://images.unsplash.com/photo-1555992336-cbfdbcad1cf1?auto=format&fit=crop&w=900&q=80",
-                "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80",
+                "/Spis1.jpg",
+                "/spis2.webp",
+                "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80",
               ],
             },
           ],
@@ -38,29 +33,76 @@ const samplePlanResponse = {
       {
         name: "PlacesSearchTool",
         arguments: {
-          location: "Levoča",
-          categories: ["culture", "architecture"],
+          location: "Dolný Kubín / Ružomberok",
+          categories: ["art", "gallery"],
         },
         output: {
           places: [
             {
-              name: "Bazilika sv. Jakuba",
-              category: "Culture",
-              highlight: "Gotický chrám s dielami Majstra Pavla a panoramatickým výhľadom na mesto.",
-              website: "https://www.levoca.sk/bazilika-sv-jakuba",
+              name: "Oravská galéria",
+              category: "Art Gallery",
+              highlight: "Modern and regional art displayed inside the historic County House right in Dolný Kubín.",
+              website: "https://www.oravskagaleria.sk",
+              coordinates: {
+                lat: 49.2102,
+                lon: 19.296,
+              },
               images: [
-                "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=900&q=80",
-                "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=900&q=80",
+                "/galeria1.jpg",
+                "/galeria2.jpg",
+                "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=1200&q=80",
               ],
             },
+          ],
+        },
+      },
+      {
+        name: "PlacesSearchTool",
+        arguments: {
+          location: "Žilina",
+          categories: ["history", "craft"],
+        },
+        output: {
+          places: [
             {
-              name: "Mestská radnica Levoča",
-              category: "Architecture",
-              highlight: "Renesančná stavba s klietkou hanby a výhľadom na historické jadro Levoče.",
-              website: "https://www.levoca.sk/mestska-radnica",
+              name: "Budatínsky hrad – Múzeum drotárstva",
+              category: "History",
+              highlight: "Renaissance castle at the confluence of the Váh and Kysuca rivers with a museum of master wire artisans.",
+              website: "https://www.pmza.sk/budatinsky-hrad",
+              coordinates: {
+                lat: 49.2308,
+                lon: 18.7444,
+              },
               images: [
-                "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80",
-                "https://images.unsplash.com/photo-1470246973918-29a93221c455?auto=format&fit=crop&w=900&q=80",
+                "/badatin1.jpg",
+                "/budatin2.jpg",
+                "https://images.unsplash.com/photo-1470246973918-29a93221c455?auto=format&fit=crop&w=1200&q=80",
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: "PlacesSearchTool",
+        arguments: {
+          location: "Trenčín / toward Bratislava",
+          categories: ["castle", "viewpoint"],
+        },
+        output: {
+          places: [
+            {
+              name: "Trenčiansky hrad",
+              category: "Castle",
+              highlight: "Dominant fortress of the Považie region with legends of Omar and Fatima plus commanding views over the whole city.",
+              website: "https://www.muzeumtn.sk/",
+              coordinates: {
+                lat: 48.8945,
+                lon: 18.0413,
+              },
+              images: [
+                "/trencin1.jpg",
+                "/trencin2.jpg",
+                "https://images.unsplash.com/photo-1469474968028-3525cd0b379e?auto=format&fit=crop&w=1200&q=80",
               ],
             },
           ],
