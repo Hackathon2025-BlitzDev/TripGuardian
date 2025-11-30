@@ -23,5 +23,9 @@ export async function fetchCalendarTrips(idToken: string) {
     throw new Error(`Calendar sync failed: ${res.status} ${text}`);
   }
 
-  return res.json() as Promise<{ trips: any[] }>;
+  const data = await res.json();
+  console.log("Calendar trips from backend:", data);
+
+  // return res.json() as Promise<{ trips: any[] }>;
+   return data.trips ?? [];
 }

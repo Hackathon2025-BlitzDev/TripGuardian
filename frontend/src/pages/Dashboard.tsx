@@ -35,7 +35,7 @@ import LocationAutocomplete from "../components/LocationAutocomplete";
 import RouteMap, { type RouteMapMarker } from "../components/RouteMap";
 import samplePlanResponse from "../mocks/samplePlanResponse";
 import { SyncCalendarTripsButton } from "../components/SyncCalendarTripsButton";
-import { ConnectGoogleCalendarButton } from "../components/ConnectGoogleCalendarButton";
+// import { ConnectGoogleCalendarButton } from "../components/ConnectGoogleCalendarButton";
 
 const stats: { label: string; value: string; path?: string }[] = [
   { label: "Planned routes", value: "12", path: "/trips" },
@@ -530,7 +530,6 @@ const Dashboard = () => {
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">
             Dashboard
           </p>
-            <ConnectGoogleCalendarButton />
             <SyncCalendarTripsButton />
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
