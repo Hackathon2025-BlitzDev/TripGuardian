@@ -1,118 +1,177 @@
 # 🧭 TripGuardian
-TripGuardian is an autonomous AI agent that helps you plan a route, refine it to your preferences, and once you start your journey, it monitors your location, weather, and conditions in real time - proactively suggesting adjustments to ensure your trip is as smooth and enjoyable as possible.
+
+**TripGuardian** is an autonomous multi-agent system that helps you plan routes, refine them, and intelligently adapt your journey in real time.  
+It doesn’t just plan your trip - it travels with you, monitors conditions, and proactively recommends adjustments so your route is always optimal.
 
 ---
 
-## 🌍 The Problem We Solve
+# 🌍 The Problem We Solve
 
-Traditional navigation tools can plan a route, but they fail when conditions change:
+Traditional navigation tools fail when real-world conditions change:
 
-- the plan is static and doesn’t adapt to delays or weather,
-- AI planners usually stop after the first suggestion,
-- the user must constantly think about whether to skip, shorten, or change something.
+- plans are static and don’t adapt to delays or weather,
+- AI planners usually stop after generating a single draft,
+- the user must constantly decide whether to skip or adjust stops,
+- no system behaves like an intelligent co-driver that anticipates needs.
 
-There is no tool that behaves like a **digital co-driver**, not just a map.
+TripGuardian fills this gap by acting as a **digital co-pilot**, not just a map.
 
 ---
 
-## 💡 The Solution – LiveRoute Agent
+# 🤖 Multi-Agent Architecture
 
-LiveRoute Agent operates in two phases:
+TripGuardian consists of **three autonomous AI agents**, each responsible for a different phase of the journey:
 
-### 1️⃣ Planning Phase
+1. **Calendar Watcher Agent** – detects upcoming trips from the user’s Google Calendar.  
+2. **Trip Planner Agent** – generates and refines route drafts with meaningful stops.  
+3. **Live Route Agent** – monitors the active journey and adapts it in real time.
 
-The user enters:
+Together, they think, plan, act, and coordinate — fulfilling the Autonomous AI Agents challenge.
+
+---
+
+# 📅 Calendar Watcher Agent
+
+With the user’s consent to connect their Google Calendar, the **Calendar Watcher Agent** works quietly in the background:
+
+- periodically scans calendar events (daily/weekly),
+- detects events that imply long-distance travel,
+- identifies meeting locations, out-of-town events, and trips far from the user’s home,
+- generates a **Trip Opportunity** whenever it finds potential travel.
+
+Example:
+
+> “You have a meeting in Bratislava next Friday. Would you like me to draft a route from Kosice with meaningful stops along the way?”
+
+The Trip Opportunity is then passed to the Trip Planner Agent.
+
+---
+
+# 🧠 Trip Planner Agent
+
+The **Trip Planner Agent** begins when the user manually enters a route *or* when a trip opportunity is detected.
+
+### User provides:
 - **Start** and **Destination (A → B)**  
-- optional preferences (scenic views, quick stops, coffee/food, etc.)
+- optional preferences (views, nature, food, culture, quick stops)
 
-The AI agent:
-- generates the first draft of a route with recommended POIs,  
-- adds short descriptions and recommendations,  
-- allows the user to add, remove, or reorder stops.
+### Agent does:
+1. generates a draft route with recommended POIs along the way,  
+2. adds short descriptions and weather suitability,  
+3. allows the user to reorder, add, or remove stops,  
+4. saves the route when the user clicks **Save Route**.
 
-When satisfied, the user hits **Save Route**.
-
----
-
-### 2️⃣ Live Mode – Autonomous Agent on the Road
-
-When the user starts the trip:
-
-- they click **Start** on a saved route,
-- the web app begins **live location tracking**,
-- shows the user on the map along with the planned route.
-
-Every X minutes, the agent:
-
-1. reads the current location,  
-2. fetches weather for upcoming points,  
-3. analyzes timing, delays, and conditions,  
-4. autonomously generates actionable suggestions:
-
-> “Rain is expected at Stop 3. I recommend skipping the viewpoint and visiting a café in City X.”  
-> “You’re running behind schedule. Consider shortening Stop Y to 10 minutes.”
-
-The user can accept or ignore the suggestions.  
-The agent handles all reasoning autonomously.
+The result is a personalized and flexible travel plan.
 
 ---
 
-## 🎯 MVP Features (Hackathon Version)
+# 🚗 Live Route Agent
+
+When the user actually starts their journey:
+
+- they open a saved route and press **Start**,  
+- the web app begins **live location tracking** (browser-based),  
+- the map displays the user’s current position and planned stops.
+
+### Every X minutes, the agent autonomously:
+1. reads the user's live GPS location,  
+2. checks upcoming weather conditions,  
+3. evaluates timing and delays,  
+4. generates actionable recommendations:
+
+Examples:
+
+> “Rain expected at Stop 2 — consider skipping the viewpoint and visiting this café instead.”  
+>  
+> “You’re 30 minutes behind schedule. I recommend shortening Stop 3.”
+
+The user may accept or ignore these suggestions — the agent handles all reasoning.
+
+---
+
+# 🎯 Hackathon MVP – Feature Overview
 
 ### Route Planning
-- Form: Start, Destination  
+- Input: Start + Destination  
 - AI-generated POIs with descriptions  
-- User selects final stops → route is saved  
+- User selects final stops  
+- Saved route stored locally or in DynamoDB  
 
 ### Route Details
-- map display  
-- list of stops  
+- Map view  
+- List of selected stops  
+- Button to start Live Mode  
 
 ### Live Mode
-- browser-based live tracking  
-- periodic (every X minutes) weather + analysis  
-- text-based recommendations displayed in UI  
+- Browser-based GPS tracking  
+- Periodic weather check  
+- AI-powered recommendations  
+- Text-only suggestions
 
-> No automatic map re-routing in MVP — suggestions are text-only, which is perfect for a hackathon proof-of-concept.
+### Calendar Integration
+- Google Calendar read-only connection  
+- Calendar Watcher detects possible trips  
+- Suggests planning a route automatically
 
 ---
 
-## 🤖 Why It Qualifies as an Autonomous AI Agent
+# 🧩 Why It Qualifies as an Autonomous AI System
 
-The user provides only high-level goals:
+The user gives only high-level commands:
 - “Plan a route from A to B.”  
-- “Start live mode.”
+- “Start live mode.”  
+- “Check my calendar for upcoming trips.”
 
-The agent then autonomously:
-- plans and adjusts the route,
-- uses routing, weather, geolocation, and AI reasoning,
-- monitors conditions periodically,
-- generates decisions and suggestions without being asked.
+Meanwhile, the agents autonomously:
 
-It behaves like a **digital co-pilot**, not a chatbot.
+- analyze the calendar,
+- detect travel opportunities,
+- create draft routes,
+- monitor weather and timing,
+- propose adjustments without being asked.
+
+TripGuardian behaves as a true **autonomous multi-agent co-pilot**, not a simple chatbot.
+
+---
+
+# 🏗️ Tech Stack
+
+## Frontend
+- **React + Vite**  
+- **Progressive Web App (PWA)**  
+- **Leaflet or Mapbox** for maps  
+- **Tailwind CSS** for styling  
+
+## Backend (Serverless)
+- **AWS Lambda** for logic + AI calls  
+- **AWS API Gateway** for REST endpoints  
+- **AWS Cognito** for Google OAuth2 login  
+
+## Hosting & Storage
+- **Amazon S3** for PWA hosting  
+- **AWS CloudFront** for CDN  
+- **DynamoDB** for persistent route storage (optional)  
+
+## AI Engine
+- **OpenAI API**  
+  - GPT-4.1-mini for fast reasoning  
+  - GPT-4.1 for high-quality route planning  
+
+## External Integrations
+- **Google Calendar API (read-only)**  
+- **OpenWeather API**  
+- **Map routing API** (Mapbox/Google)
 
 ---
 
-## 🏗️ Tech Stack
+# 🚀 Summary
 
-### Frontend
-- **React + Vite**
-- **PWA (Progressive Web App)**
-- Map integration (Mapbox / Leaflet)
+TripGuardian is not just a route planner.  
+It is an **autonomous, proactive, multi-agent travel companion** that:
 
-### Backend (Serverless)
-- **AWS Lambda**
-- **AWS API Gateway**
+- discovers upcoming trips from your calendar,  
+- drafts personalized routes with meaningful stops,  
+- monitors your journey in real time,  
+- adapts your trip automatically based on weather and delays.
 
-### Hosting & Storage
-- **Amazon S3**: `travel-guardian-webui`  
-- **AWS CloudFront** (CDN distribution)
-
-### Authentication
-- **Google OAuth2**
-- **AWS Cognito**
-
-### AI
-- **OpenAI API**
-
----
+A travel experience that finally *thinks with you* — not after you.
