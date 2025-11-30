@@ -1,0 +1,22 @@
+{
+  "basics": {
+    "start": "Bratislava",
+    "destination": "Praha",
+    "stops": [
+      "Brno"
+    ],
+    "startDate": "2025-05-01",
+    "endDate": "2025-05-05",
+    "flexibleDates": false
+  },
+  "preferences": {
+    "categories": [
+      "Culture",
+      "Food",
+      "Art & Galleries"
+    ],
+    "transport": "train",
+    "budget": "600",
+    "notes": "Preferovat lokalne festivaly a moderne galerie."
+  }
+}

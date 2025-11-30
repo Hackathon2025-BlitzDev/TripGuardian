@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "react-oidc-context";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
+import Trips from "./pages/Trips";
 
 const PrivateRoute = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
@@ -28,6 +29,7 @@ function App() {
           </PrivateRoute>
         }
       />
+      <Route path="/trips" element={<Trips />} />
       <Route
         path="*"
         element={<Navigate to={auth.isAuthenticated ? "/dashboard" : "/"} replace />}

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
+  LuArrowUpRight,
   LuCheck,
   LuChevronDown,
   LuFerrisWheel,
   LuHeartPulse,
   LuLandmark,
   LuLightbulb,
+  LuMapPin,
   LuMountain,
   LuPalette,
   LuPartyPopper,
@@ -29,10 +32,11 @@ import {
 } from "react-icons/fa6";
 import DatePickerInput from "../components/DatePickerInput";
 import LocationAutocomplete from "../components/LocationAutocomplete";
+import RouteMap, { type RouteMapMarker } from "../components/RouteMap";
+import samplePlanResponse from "../mocks/samplePlanResponse";
 
-const stats = [
-//   { label: "Active trips", value: "3" },
-  { label: "Planned routes", value: "12" },
+const stats: { label: string; value: string; path?: string }[] = [
+  { label: "Planned routes", value: "12", path: "/trips" },
   { label: "Saved places", value: "28" },
 ];
 
@@ -76,6 +80,186 @@ type BasicsState = {
   flexibleDates: boolean;
 };
 
+type PreferencesState = {
+  categories: string[];
+  transport: string;
+  budget: string;
+  notes: string;
+};
+
+type Coordinates = {
+  lat: number;
+  lon: number;
+};
+
+type PlanPlace = {
+  name: string;
+  category?: string;
+  highlight?: string;
+  website?: string | null;
+  images: string[];
+  coordinates?: Coordinates | null;
+};
+
+type PlanLocation = {
+  location: string;
+  places: PlanPlace[];
+};
+
+type PlanResult = {
+  summary: string;
+  locations: PlanLocation[];
+};
+
+type TripPlanRequestPayload = {
+  basics: {
+    start: string;
+    destination: string;
+    stops: string[];
+    startDate: string | null;
+    endDate: string | null;
+    flexibleDates: boolean;
+  };
+  preferences: PreferencesState;
+};
+
+const PLAN_API_URL = import.meta.env.VITE_TRIP_PLAN_ENDPOINT;
+const FALLBACK_PLACE_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=60";
+const geocodeCache = new Map<string, Coordinates | null>();
+
+const normalizeDate = (value: Date | null) => (value ? value.toISOString() : null);
+
+const createTripPlanRequestPayload = (basics: BasicsState, preferences: PreferencesState): TripPlanRequestPayload => ({
+  basics: {
+    start: basics.start.trim(),
+    destination: basics.destination.trim(),
+    stops: basics.stops.map((stop) => stop.trim()).filter((stop) => stop.length > 0),
+    startDate: normalizeDate(basics.startDate),
+    endDate: normalizeDate(basics.endDate),
+    flexibleDates: basics.flexibleDates,
+  },
+  preferences,
+});
+
+const toImageArray = (value: unknown): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+  return [];
+};
+
+const toNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const geocodeLabel = async (query: string): Promise<Coordinates | null> => {
+  const cleaned = query.trim();
+  if (!cleaned) return null;
+  if (geocodeCache.has(cleaned)) return geocodeCache.get(cleaned) ?? null;
+
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("limit", "1");
+    url.searchParams.set("q", cleaned);
+    const response = await fetch(url.toString(), {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new Error("Geocode failed");
+    const data: Array<{ lat: string; lon: string }> = await response.json();
+    if (data.length === 0) {
+      geocodeCache.set(cleaned, null);
+      return null;
+    }
+    const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) } satisfies Coordinates;
+    geocodeCache.set(cleaned, coords);
+    return coords;
+  } catch (error) {
+    console.error("Geocode error", query, error);
+    geocodeCache.set(cleaned, null);
+    return null;
+  }
+};
+
+const parsePlanResponse = (payload: unknown): PlanResult => {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const summary = typeof data.text === "string" ? data.text : "";
+  const tools = Array.isArray((data.context as Record<string, unknown>)?.tools_used)
+    ? ((data.context as Record<string, unknown>)?.tools_used as unknown[])
+    : [];
+
+  const locations: PlanLocation[] = tools
+    .map((toolEntry) => {
+      const tool = toolEntry as Record<string, unknown>;
+      const location =
+        typeof (tool.arguments as Record<string, unknown>)?.location === "string"
+          ? ((tool.arguments as Record<string, unknown>).location as string)
+          : "Neznáma lokalita";
+      const placesSource = Array.isArray((tool.output as Record<string, unknown>)?.places)
+        ? ((tool.output as Record<string, unknown>)?.places as unknown[])
+        : [];
+
+      const places: PlanPlace[] = placesSource
+        .map((entry, index) => {
+          const place = entry as Record<string, unknown>;
+          const name = typeof place.name === "string" ? place.name : `Atrakcia ${index + 1}`;
+          const coordinatesSource =
+            typeof place.coordinates === "object" && place.coordinates !== null
+              ? (place.coordinates as Record<string, unknown>)
+              : undefined;
+          const latValue =
+            toNumber(coordinatesSource?.lat) ??
+            toNumber(coordinatesSource?.latitude) ??
+            toNumber(place.lat) ??
+            toNumber(place.latitude);
+          const lonValue =
+            toNumber(coordinatesSource?.lon) ??
+            toNumber(coordinatesSource?.lng) ??
+            toNumber(coordinatesSource?.longitude) ??
+            toNumber(place.lon) ??
+            toNumber(place.lng) ??
+            toNumber(place.longitude);
+          const coordinates = latValue != null && lonValue != null ? ({ lat: latValue, lon: lonValue } satisfies Coordinates) : undefined;
+          return {
+            name,
+            category: typeof place.category === "string" ? place.category : undefined,
+            highlight:
+              typeof place.highlight === "string"
+                ? place.highlight
+                : typeof place.description === "string"
+                ? place.description
+                : undefined,
+            website:
+              typeof place.website === "string"
+                ? place.website
+                : typeof place.url === "string"
+                ? place.url
+                : null,
+            images: toImageArray(place.images ?? place.image),
+            coordinates,
+          } satisfies PlanPlace;
+        })
+        .filter((place) => place.name.trim().length > 0);
+
+      return { location, places } satisfies PlanLocation;
+    })
+    .filter((location) => location.places.length > 0);
+
+  return {
+    summary,
+    locations,
+  };
+};
+
 const Dashboard = () => {
   const [activeStep, setActiveStep] = useState(1);
   const [basics, setBasics] = useState<BasicsState>({
@@ -86,7 +270,7 @@ const Dashboard = () => {
     endDate: null,
     flexibleDates: false,
   });
-  const [preferences, setPreferences] = useState({
+  const [preferences, setPreferences] = useState<PreferencesState>({
     categories: [] as string[],
     transport: transportOptions[0].value,
     budget: "",
@@ -98,6 +282,12 @@ const Dashboard = () => {
     radius: "",
     description: "",
   });
+  const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [mapData, setMapData] = useState<{ markers: RouteMapMarker[]; routeLine: Coordinates[] } | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const transportRef = useRef<HTMLDivElement>(null);
   const [transportOpen, setTransportOpen] = useState(false);
   const selectedTransport = useMemo(
@@ -176,9 +366,41 @@ const Dashboard = () => {
     });
   };
 
-  const handleGenerateTrip = () => {
-    console.log("Trip payload", { basics, preferences });
-    alert("Thanks! Your planning request has been saved.");
+  const handleGenerateTrip = async () => {
+    setPlanError(null);
+    setPlanLoading(true);
+    const endpoint = PLAN_API_URL?.trim();
+    if (!endpoint) {
+      setPlanLoading(false);
+      setPlanError("Chýba konfigurácia API endpointu. Doplnte VITE_TRIP_PLAN_ENDPOINT do .env súboru.");
+      return;
+    }
+    try {
+      const requestPayload = createTripPlanRequestPayload(basics, preferences);
+      console.log("Trip plan request payload:", JSON.stringify(requestPayload, null, 2));
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Planner API responded with ${response.status}`);
+      }
+
+      const payload = await response.json();
+      setPlanResult(parsePlanResponse(payload));
+    } catch (error) {
+      console.error("Trip planning failed", error);
+      if (import.meta.env.DEV) {
+        console.warn("Falling back to sample AI response. Configure VITE_TRIP_PLAN_ENDPOINT for live data.");
+        setPlanResult(parsePlanResponse(samplePlanResponse));
+      } else {
+        setPlanError("Nepodarilo sa načítať odporúčania. Skúste to prosím znova.");
+      }
+    } finally {
+      setPlanLoading(false);
+    }
   };
 
   const handlePlanTripToggle = () => {
@@ -197,6 +419,107 @@ const Dashboard = () => {
 
   const lastStop = basics.stops[basics.stops.length - 1] ?? "";
   const canAddStop = lastStop.trim().length > 0;
+
+  useEffect(() => {
+    if (!planResult) {
+      setMapData(null);
+      setMapError(null);
+      setMapLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const buildMapData = async () => {
+      setMapLoading(true);
+      setMapError(null);
+      try {
+        const startCoord = basics.start ? await geocodeLabel(basics.start) : null;
+        const destinationCoord = basics.destination ? await geocodeLabel(basics.destination) : null;
+
+        const placeMarkersPromises = planResult.locations.flatMap((location, locIndex) =>
+          location.places.map(async (place, placeIndex) => {
+            const coords =
+              place.coordinates ??
+              (await geocodeLabel(`${place.name}, ${location.location}`));
+            if (!coords) return null;
+            return {
+              id: `${locIndex}-${placeIndex}-${place.name}`,
+              name: place.name,
+              coordinates: coords,
+              type: "place" as const,
+              location: location.location,
+            } satisfies RouteMapMarker;
+          })
+        );
+
+        const resolvedPlaceMarkers = (await Promise.all(placeMarkersPromises)).filter(Boolean) as RouteMapMarker[];
+
+        const markers: RouteMapMarker[] = [
+          ...(startCoord
+            ? [
+                {
+                  id: "start",
+                  name: basics.start || "Start",
+                  coordinates: startCoord,
+                  type: "start" as const,
+                },
+              ]
+            : []),
+          ...resolvedPlaceMarkers,
+          ...(destinationCoord
+            ? [
+                {
+                  id: "destination",
+                  name: basics.destination || "Destination",
+                  coordinates: destinationCoord,
+                  type: "destination" as const,
+                },
+              ]
+            : []),
+        ];
+
+        const locationNodes: Coordinates[] = planResult.locations
+          .map((location) => {
+            const related = resolvedPlaceMarkers.filter((marker) => marker.location === location.location);
+            if (!related.length) return null;
+            const avgLat = related.reduce((sum, marker) => sum + marker.coordinates.lat, 0) / related.length;
+            const avgLon = related.reduce((sum, marker) => sum + marker.coordinates.lon, 0) / related.length;
+            return { lat: avgLat, lon: avgLon } satisfies Coordinates;
+          })
+          .filter((node): node is Coordinates => Boolean(node));
+
+        const routeLine: Coordinates[] = [
+          ...(startCoord ? [startCoord] : []),
+          ...locationNodes,
+          ...(destinationCoord ? [destinationCoord] : []),
+        ];
+
+        if (!cancelled) {
+          if (markers.length === 0) {
+            setMapData(null);
+            setMapError("Na zobrazenie mapy chýbajú súradnice. Skúste doplniť presnejšie lokality.");
+          } else {
+            setMapData({ markers, routeLine });
+          }
+        }
+      } catch (error) {
+        console.error("Route map preparation failed", error);
+        if (!cancelled) {
+          setMapError("Mapu sa nepodarilo načítať. Skúste to o chvíľu znova.");
+          setMapData(null);
+        }
+      } finally {
+        if (!cancelled) setMapLoading(false);
+      }
+    };
+
+    void buildMapData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planResult, basics.start, basics.destination]);
 
   return (
     <section className="min-h-[70vh] bg-slate-50 py-16">
@@ -220,12 +543,32 @@ const Dashboard = () => {
         </div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          {stats.map((stat) => (
-            <article key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5">
-              <p className="text-sm uppercase tracking-[0.35em] text-slate-400">{stat.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-900">{stat.value}</p>
-            </article>
-          ))}
+          {stats.map((stat) => {
+            const content = (
+              <>
+                <p className="text-sm uppercase tracking-[0.35em] text-slate-400">{stat.label}</p>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">{stat.value}</p>
+              </>
+            );
+
+            if (stat.path) {
+              return (
+                <Link
+                  key={stat.label}
+                  to={stat.path}
+                  className="rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5 transition hover:-translate-y-1 hover:border-slate-200 hover:shadow-lg"
+                >
+                  {content}
+                </Link>
+              );
+            }
+
+            return (
+              <article key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5">
+                {content}
+              </article>
+            );
+          })}
         </div>
 
         <div className="mt-10 flex flex-wrap gap-3">
@@ -522,12 +865,17 @@ const Dashboard = () => {
                     <button
                       type="button"
                       onClick={handleGenerateTrip}
-                      className="tg-btn tg-btn--primary gap-4"
+                      disabled={planLoading}
+                      className={`tg-btn tg-btn--primary gap-4 ${planLoading ? "opacity-70" : ""}`}
                     >
-                      Generate trip
+                      {planLoading ? "Generating..." : "Generate trip"}
                       <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm font-semibold">
-                        {SelectedTransportIcon && <SelectedTransportIcon aria-hidden className="text-lg" />}
-                        <span>Plan</span>
+                        {planLoading ? (
+                          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+                        ) : (
+                          SelectedTransportIcon && <SelectedTransportIcon aria-hidden className="text-lg" />
+                        )}
+                        <span>{planLoading ? "Working" : "Plan"}</span>
                       </span>
                     </button>
                   </div>
@@ -584,6 +932,160 @@ const Dashboard = () => {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {planError && (
+          <div className="mt-6 rounded-3xl border border-red-100 bg-red-50/70 px-5 py-4 text-sm text-red-600">
+            {planError}
+          </div>
+        )}
+
+        {planResult && planResult.locations.length > 0 && (
+          <div className="mt-12 space-y-8">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+              <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-[0_30px_70px_rgba(15,23,42,0.08)]">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.35em] text-indigo-500">Route overview</p>
+                    <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                      {basics.start || "Start"} <span className="text-slate-400">→</span> {basics.destination || "Destination"}
+                    </h3>
+                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                      <span className="inline-flex items-center gap-2">
+                        <LuMapPin aria-hidden className="text-indigo-500" />
+                        {planResult.locations.length} odporúčaných zastávok
+                      </span>
+                      {!basics.flexibleDates && basics.startDate && basics.endDate && (
+                        <span className="inline-flex items-center gap-2">
+                          <LuMapPin aria-hidden className="text-indigo-500" />
+                          {basics.startDate.toLocaleDateString()} – {basics.endDate.toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {preferences.categories.slice(0, 3).map((category) => (
+                      <span key={category} className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-600">
+                        {category}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-900/5">
+                    {mapData && mapData.markers.length > 0 ? (
+                      <RouteMap markers={mapData.markers} routeLine={mapData.routeLine} />
+                    ) : (
+                      <div className="flex h-64 items-center justify-center text-sm text-slate-500">
+                        {mapLoading ? "Načítavam mapu…" : "Mapa bude k dispozícii po získaní súradníc."}
+                      </div>
+                    )}
+                  </div>
+                  {mapError && <p className="text-xs text-red-500">{mapError}</p>}
+                  <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-900/90 p-6 text-sm text-white sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Transport</p>
+                      <p className="mt-1 font-semibold">{selectedTransport?.label}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Zastávky</p>
+                      <p className="mt-1 font-semibold">{planResult.locations.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Odporúčané miesta</p>
+                      <p className="mt-1 font-semibold">
+                        {planResult.locations.reduce((total, loc) => total + loc.places.length, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-500">AI odporúčanie</p>
+                  <div className="mt-4 space-y-2 text-sm text-slate-600">
+                    {planResult.summary
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .filter((line) => line.length > 0)
+                      .map((line, index) => (
+                        <p key={`summary-${index}`}>{line.replace(/^#+\s*/, "")}</p>
+                      ))}
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Zdieľanie</p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <button className="tg-btn tg-btn--secondary w-full justify-center">Exportovať do PDF</button>
+                    <button className="tg-btn tg-btn--secondary w-full justify-center">Exportovať do Excelu</button>
+                    <button className="tg-btn tg-btn--ghost w-full justify-center">Zdieľať odkaz</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {planResult.locations.map((location) => (
+                <article key={location.location} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-[0_25px_65px_rgba(15,23,42,0.05)]">
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">Zastávka</p>
+                      <h4 className="text-2xl font-semibold text-slate-900">{location.location}</h4>
+                      <p className="text-sm text-slate-500">Odporúčané atrakcie pre túto oblasť</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-4 py-1 text-sm font-semibold text-slate-600">
+                      {location.places.length} miest
+                    </span>
+                  </div>
+
+                  <div className="mt-6 grid gap-5 md:grid-cols-2">
+                    {location.places.map((place) => (
+                      <div key={place.name} className="flex flex-col gap-4 rounded-2xl border border-slate-100 p-4">
+                        <div className="relative overflow-hidden rounded-2xl">
+                          <img
+                            src={place.images[0] ?? FALLBACK_PLACE_IMAGE}
+                            alt={place.name}
+                            className="h-48 w-full object-cover"
+                            loading="lazy"
+                          />
+                          {place.images.length > 1 && (
+                            <div className="absolute bottom-3 right-3 flex gap-1">
+                              {place.images.slice(1, 3).map((img) => (
+                                <img key={img} src={img} alt="detail" className="h-10 w-10 rounded-full border border-white object-cover" loading="lazy" />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          {place.website ? (
+                            <a
+                              href={place.website}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 text-lg font-semibold text-slate-900 transition hover:text-indigo-600"
+                            >
+                              {place.name}
+                              <LuArrowUpRight aria-hidden />
+                            </a>
+                          ) : (
+                            <p className="text-lg font-semibold text-slate-900">{place.name}</p>
+                          )}
+                          {place.category && (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                              {place.category}
+                            </span>
+                          )}
+                          {place.highlight && <p className="text-sm text-slate-500">{place.highlight}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
         )}

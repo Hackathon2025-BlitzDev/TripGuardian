@@ -20,9 +20,12 @@ const Navbar = ({ signOut }: NavbarProps) => {
         </Link>
 
         <div className="flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-slate-600 sm:justify-end">
-          <button className="rounded-full border border-transparent px-5 py-2 transition hover:border-slate-200 hover:bg-slate-50">
+          <Link
+            to="/trips"
+            className="rounded-full border border-transparent px-5 py-2 transition hover:border-slate-200 hover:bg-slate-50"
+          >
             My Trips
-          </button>
+          </Link>
           {auth.isAuthenticated ? (
             <button
               onClick={signOut}
